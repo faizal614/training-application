@@ -16,7 +16,12 @@ from backend.app.models.quiz import Quiz
 from backend.app.models.quiz_attempt import QuizAttempt
 from backend.app.models.user import User
 from backend.app.schemas.certificate import CertificateResponse
+from io import BytesIO
 
+from fastapi.responses import StreamingResponse
+
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 router = APIRouter(
     prefix="/courses",
@@ -163,3 +168,123 @@ def generate_certificate(
     db.refresh(certificate)
 
     return certificate
+
+@router.get(
+    "/certificates/{certificate_id}",
+    response_model=CertificateResponse,
+)
+def get_certificate(
+    certificate_id: int,
+    db: Session = Depends(get_db),
+):
+    certificate = (
+        db.query(Certificate)
+        .filter(Certificate.id == certificate_id)
+        .first()
+    )
+
+    if certificate is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Certificate not found",
+        )
+
+    return certificate
+@router.get(
+    "/certificates/{certificate_id}/download",
+)
+def download_certificate(
+    certificate_id: int,
+    db: Session = Depends(get_db),
+):
+    certificate = (
+        db.query(Certificate)
+        .filter(Certificate.id == certificate_id)
+        .first()
+    )
+
+    if certificate is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Certificate not found",
+        )
+
+    buffer = BytesIO()
+
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+
+    width, height = A4
+
+    pdf.setTitle(
+        f"Certificate - {certificate.certificate_number}"
+    )
+
+    pdf.setFont("Helvetica-Bold", 24)
+    pdf.drawCentredString(
+        width / 2,
+        height - 150,
+        "Certificate of Completion",
+    )
+
+    pdf.setFont("Helvetica", 14)
+    pdf.drawCentredString(
+        width / 2,
+        height - 220,
+        "This certificate is proudly presented to",
+    )
+
+    pdf.setFont("Helvetica-Bold", 20)
+    pdf.drawCentredString(
+        width / 2,
+        height - 270,
+        certificate.participant_name,
+    )
+
+    pdf.setFont("Helvetica", 14)
+    pdf.drawCentredString(
+        width / 2,
+        height - 320,
+        "for successfully completing",
+    )
+
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawCentredString(
+        width / 2,
+        height - 365,
+        certificate.course_name,
+    )
+
+    pdf.setFont("Helvetica", 12)
+    pdf.drawCentredString(
+        width / 2,
+        height - 430,
+        f"Final Score: {certificate.final_score}%",
+    )
+
+    pdf.drawCentredString(
+        width / 2,
+        height - 460,
+        f"Completion Date: {certificate.completion_date.date()}",
+    )
+
+    pdf.drawCentredString(
+        width / 2,
+        height - 500,
+        f"Certificate Number: {certificate.certificate_number}",
+    )
+
+    pdf.showPage()
+    pdf.save()
+
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="certificate-'
+                f'{certificate.certificate_number}.pdf"'
+            )
+        },
+    )
