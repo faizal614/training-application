@@ -38,7 +38,7 @@ from backend.app.models.answer import Answer
 from backend.app.models.course_assignment import CourseAssignment
 from backend.app.models.module_progress import ModuleProgress
 from backend.app.models.quiz_attempt import QuizAttempt
-
+from backend.app.models.certificate import Certificate
 
 target_metadata = Base.metadata
 
