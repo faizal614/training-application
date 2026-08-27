@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.app.auth.authorization import require_admin
+from backend.app.auth.dependencies import get_current_user
 from backend.app.database import get_db
 from backend.app.models.course import Course
+from backend.app.models.course_assignment import CourseAssignment
 from backend.app.models.module import Module
 from backend.app.models.module_progress import ModuleProgress
+from backend.app.models.user import User, UserRole
 from backend.app.schemas.course import CourseCreate, CourseResponse
 
 
@@ -14,10 +18,15 @@ router = APIRouter(
 )
 
 
+# -------------------------
+# CREATE COURSE
+# -------------------------
+
 @router.post("/", response_model=CourseResponse)
 def create_course(
     course_data: CourseCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
     course = Course(
         title=course_data.title,
@@ -31,12 +40,49 @@ def create_course(
     return course
 
 
+# -------------------------
+# GET ALL COURSES
+# -------------------------
+
 @router.get("/", response_model=list[CourseResponse])
 def get_courses(
     db: Session = Depends(get_db),
 ):
     return db.query(Course).all()
 
+
+# -------------------------
+# GET MY ENROLLED COURSES
+# -------------------------
+
+@router.get("/enrolled/me")
+def get_my_enrolled_courses(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    assignments = (
+        db.query(CourseAssignment)
+        .filter(
+            CourseAssignment.user_id == current_user.id,
+        )
+        .all()
+    )
+
+    return [
+        {
+            "assignment_id": assignment.id,
+            "course_id": assignment.course.id,
+            "title": assignment.course.title,
+            "description": assignment.course.description,
+            "assigned_at": assignment.assigned_at,
+        }
+        for assignment in assignments
+    ]
+
+
+# -------------------------
+# GET SINGLE COURSE
+# -------------------------
 
 @router.get("/{course_id}", response_model=CourseResponse)
 def get_course(
@@ -58,10 +104,74 @@ def get_course(
     return course
 
 
+# -------------------------
+# ENROLL IN COURSE
+# -------------------------
+
+@router.post("/{course_id}/enroll")
+def enroll_in_course(
+    course_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != UserRole.LEARNER:
+        raise HTTPException(
+            status_code=403,
+            detail="Only learners can enroll in courses",
+        )
+
+    course = (
+        db.query(Course)
+        .filter(Course.id == course_id)
+        .first()
+    )
+
+    if course is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Course not found",
+        )
+
+    existing_assignment = (
+        db.query(CourseAssignment)
+        .filter(
+            CourseAssignment.user_id == current_user.id,
+            CourseAssignment.course_id == course_id,
+        )
+        .first()
+    )
+
+    if existing_assignment is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Already enrolled in this course",
+        )
+
+    assignment = CourseAssignment(
+        user_id=current_user.id,
+        course_id=course_id,
+    )
+
+    db.add(assignment)
+    db.commit()
+    db.refresh(assignment)
+
+    return {
+        "message": "Successfully enrolled in course",
+        "course_id": course_id,
+        "user_id": current_user.id,
+        "assignment_id": assignment.id,
+    }
+
+
+# -------------------------
+# GET MY COURSE PROGRESS
+# -------------------------
+
 @router.get("/{course_id}/progress")
 def get_course_progress(
     course_id: int,
-    user_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     course = (
@@ -75,6 +185,8 @@ def get_course_progress(
             status_code=404,
             detail="Course not found",
         )
+
+    user_id = current_user.id
 
     modules = (
         db.query(Module)
@@ -106,18 +218,18 @@ def get_course_progress(
         progress = progress_by_module.get(module.id)
 
         if progress is not None:
-            status = progress.status.value
+            module_status = progress.status.value
 
             if progress.status.value == "completed":
                 completed_modules += 1
         else:
-            status = "pending"
+            module_status = "pending"
 
         module_progress.append(
             {
                 "module_id": module.id,
                 "title": module.title,
-                "status": status,
+                "status": module_status,
             }
         )
 

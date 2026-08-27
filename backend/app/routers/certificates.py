@@ -1,9 +1,14 @@
 from datetime import datetime
+from io import BytesIO
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 from sqlalchemy.orm import Session
 
+from backend.app.auth.dependencies import get_current_user
 from backend.app.database import get_db
 from backend.app.models.certificate import Certificate
 from backend.app.models.course import Course
@@ -16,12 +21,7 @@ from backend.app.models.quiz import Quiz
 from backend.app.models.quiz_attempt import QuizAttempt
 from backend.app.models.user import User
 from backend.app.schemas.certificate import CertificateResponse
-from io import BytesIO
 
-from fastapi.responses import StreamingResponse
-
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
 
 router = APIRouter(
     prefix="/courses",
@@ -29,13 +29,17 @@ router = APIRouter(
 )
 
 
+# -------------------------
+# GENERATE CERTIFICATE
+# -------------------------
+
 @router.post(
     "/{course_id}/certificate",
     response_model=CertificateResponse,
 )
 def generate_certificate(
     course_id: int,
-    user_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     course = (
@@ -50,17 +54,8 @@ def generate_certificate(
             detail="Course not found",
         )
 
-    user = (
-        db.query(User)
-        .filter(User.id == user_id)
-        .first()
-    )
-
-    if user is None:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found",
-        )
+    user_id = current_user.id
+    user = current_user
 
     modules = (
         db.query(Module)
@@ -169,49 +164,64 @@ def generate_certificate(
 
     return certificate
 
+
+# -------------------------
+# GET MY CERTIFICATES
+# -------------------------
+
 @router.get(
-    "/certificates/{certificate_id}",
-    response_model=CertificateResponse,
+    "/certificates/me",
+    response_model=list[CertificateResponse],
 )
-def get_certificate(
-    certificate_id: int,
+def get_my_certificates(
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    certificate = (
+    certificates = (
         db.query(Certificate)
-        .filter(Certificate.id == certificate_id)
-        .first()
+        .filter(
+            Certificate.user_id == current_user.id,
+        )
+        .order_by(Certificate.completion_date.desc())
+        .all()
     )
 
-    if certificate is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Certificate not found",
-        )
+    return certificates
 
-    return certificate
+
+# -------------------------
+# DOWNLOAD MY COURSE CERTIFICATE
+# -------------------------
+
 @router.get(
-    "/certificates/{certificate_id}/download",
+    "/{course_id}/certificate/download",
 )
 def download_certificate(
-    certificate_id: int,
+    course_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     certificate = (
         db.query(Certificate)
-        .filter(Certificate.id == certificate_id)
+        .filter(
+            Certificate.course_id == course_id,
+            Certificate.user_id == current_user.id,
+        )
         .first()
     )
 
     if certificate is None:
         raise HTTPException(
             status_code=404,
-            detail="Certificate not found",
+            detail="Certificate not found for this course",
         )
 
     buffer = BytesIO()
 
-    pdf = canvas.Canvas(buffer, pagesize=A4)
+    pdf = canvas.Canvas(
+        buffer,
+        pagesize=A4,
+    )
 
     width, height = A4
 
@@ -255,6 +265,7 @@ def download_certificate(
     )
 
     pdf.setFont("Helvetica", 12)
+
     pdf.drawCentredString(
         width / 2,
         height - 430,

@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.app.auth.authorization import require_instructor_or_admin
 from backend.app.database import get_db
 from backend.app.models.module import Module
 from backend.app.models.training_content import TrainingContent
+from backend.app.models.user import User
 from backend.app.schemas.training_content import (
     TrainingContentCreate,
     TrainingContentResponse,
@@ -24,6 +26,7 @@ def create_training_content(
     module_id: int,
     content_data: TrainingContentCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_instructor_or_admin),
 ):
     module = (
         db.query(Module)

@@ -1,26 +1,37 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.app.auth.dependencies import get_current_user
 from backend.app.database import get_db
-from backend.app.models.module import Module
-from backend.app.models.quiz import Quiz
-from backend.app.models.question import Question
 from backend.app.models.answer import Answer
-
-from backend.app.schemas.quiz import QuizCreate, QuizResponse
-from backend.app.schemas.question import QuestionCreate, QuestionResponse
-from backend.app.schemas.answer import AnswerCreate, AnswerResponse
-from backend.app.schemas.quiz_attempt import (
-    QuizSubmission,
-    QuizResultResponse,
-)
-from datetime import datetime
-
-from backend.app.models.quiz_attempt import QuizAttempt
+from backend.app.models.module import Module
 from backend.app.models.module_progress import (
     ModuleProgress,
     ModuleProgressStatus,
 )
+from backend.app.models.question import Question
+from backend.app.models.quiz import Quiz
+from backend.app.models.quiz_attempt import QuizAttempt
+from backend.app.models.user import User
+from backend.app.schemas.answer import (
+    AnswerCreate,
+    AnswerResponse,
+)
+from backend.app.schemas.question import (
+    QuestionCreate,
+    QuestionResponse,
+)
+from backend.app.schemas.quiz import (
+    QuizCreate,
+    QuizResponse,
+)
+from backend.app.schemas.quiz_attempt import (
+    QuizResultResponse,
+    QuizSubmission,
+)
+
 
 router = APIRouter(
     prefix="/modules",
@@ -28,9 +39,9 @@ router = APIRouter(
 )
 
 
-# -------------------------
-# QUIZ
-# -------------------------
+# =========================================================
+# CREATE QUIZ
+# =========================================================
 
 @router.post(
     "/{module_id}/quiz",
@@ -55,7 +66,9 @@ def create_quiz(
 
     existing_quiz = (
         db.query(Quiz)
-        .filter(Quiz.module_id == module_id)
+        .filter(
+            Quiz.module_id == module_id
+        )
         .first()
     )
 
@@ -65,10 +78,23 @@ def create_quiz(
             detail="Quiz already exists for this module",
         )
 
+    if quiz_data.max_attempts < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="max_attempts must be at least 1",
+        )
+
+    if not 0 <= quiz_data.passing_score <= 100:
+        raise HTTPException(
+            status_code=400,
+            detail="passing_score must be between 0 and 100",
+        )
+
     quiz = Quiz(
         module_id=module_id,
         title=quiz_data.title,
         passing_score=quiz_data.passing_score,
+        max_attempts=quiz_data.max_attempts,
     )
 
     db.add(quiz)
@@ -77,6 +103,10 @@ def create_quiz(
 
     return quiz
 
+
+# =========================================================
+# GET MODULE QUIZ
+# =========================================================
 
 @router.get(
     "/{module_id}/quiz",
@@ -100,7 +130,9 @@ def get_module_quiz(
 
     quiz = (
         db.query(Quiz)
-        .filter(Quiz.module_id == module_id)
+        .filter(
+            Quiz.module_id == module_id
+        )
         .first()
     )
 
@@ -113,9 +145,9 @@ def get_module_quiz(
     return quiz
 
 
-# -------------------------
-# QUESTIONS
-# -------------------------
+# =========================================================
+# CREATE QUESTION
+# =========================================================
 
 @router.post(
     "/quizzes/{quiz_id}/questions",
@@ -151,6 +183,10 @@ def create_question(
     return question
 
 
+# =========================================================
+# GET QUESTIONS
+# =========================================================
+
 @router.get(
     "/quizzes/{quiz_id}/questions",
     response_model=list[QuestionResponse],
@@ -173,15 +209,19 @@ def get_quiz_questions(
 
     return (
         db.query(Question)
-        .filter(Question.quiz_id == quiz_id)
-        .order_by(Question.display_order)
+        .filter(
+            Question.quiz_id == quiz_id
+        )
+        .order_by(
+            Question.display_order
+        )
         .all()
     )
 
 
-# -------------------------
-# ANSWERS
-# -------------------------
+# =========================================================
+# CREATE ANSWER
+# =========================================================
 
 @router.post(
     "/questions/{question_id}/answers",
@@ -194,7 +234,9 @@ def create_answer(
 ):
     question = (
         db.query(Question)
-        .filter(Question.id == question_id)
+        .filter(
+            Question.id == question_id
+        )
         .first()
     )
 
@@ -218,23 +260,39 @@ def create_answer(
     return answer
 
 
-# -------------------------
-# QUIZ SUBMISSION
-# -------------------------
+# =========================================================
+# RESET QUIZ ATTEMPTS
+# =========================================================
 
 @router.post(
-    "/quizzes/{quiz_id}/submit",
-    response_model=QuizResultResponse,
+    "/{module_id}/quiz/reset",
 )
-def submit_quiz(
-    quiz_id: int,
-    user_id: int,
-    submission: QuizSubmission,
+def reset_quiz_attempts(
+    module_id: int,
+    current_user: User = Depends(
+        get_current_user
+    ),
     db: Session = Depends(get_db),
 ):
+    module = (
+        db.query(Module)
+        .filter(
+            Module.id == module_id
+        )
+        .first()
+    )
+
+    if module is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Module not found",
+        )
+
     quiz = (
         db.query(Quiz)
-        .filter(Quiz.id == quiz_id)
+        .filter(
+            Quiz.module_id == module_id
+        )
         .first()
     )
 
@@ -244,21 +302,172 @@ def submit_quiz(
             detail="Quiz not found",
         )
 
+    attempts = (
+        db.query(QuizAttempt)
+        .filter(
+            QuizAttempt.user_id
+            == current_user.id,
+            QuizAttempt.quiz_id
+            == quiz.id,
+        )
+        .all()
+    )
+
+    for attempt in attempts:
+        db.delete(attempt)
+
+    module_progress = (
+        db.query(ModuleProgress)
+        .filter(
+            ModuleProgress.user_id
+            == current_user.id,
+            ModuleProgress.module_id
+            == module_id,
+        )
+        .first()
+    )
+
+    if module_progress is not None:
+        module_progress.status = (
+            ModuleProgressStatus.PENDING
+        )
+
+        module_progress.completed_at = None
+
+    db.commit()
+
+    return {
+        "message": "Quiz attempts reset successfully",
+        "attempts_remaining": quiz.max_attempts,
+    }
+
+
+# =========================================================
+# SUBMIT QUIZ
+# =========================================================
+
+@router.post(
+    "/quizzes/{quiz_id}/submit",
+    response_model=QuizResultResponse,
+)
+def submit_quiz(
+    quiz_id: int,
+    submission: QuizSubmission,
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(get_db),
+):
+    # -------------------------------------------------------
+    # FIND QUIZ
+    # -------------------------------------------------------
+
+    quiz = (
+        db.query(Quiz)
+        .filter(
+            Quiz.id == quiz_id
+        )
+        .first()
+    )
+
+    if quiz is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quiz not found",
+        )
+
+    # -------------------------------------------------------
+    # FIND MODULE
+    # -------------------------------------------------------
+
+    module = (
+        db.query(Module)
+        .filter(
+            Module.id == quiz.module_id
+        )
+        .first()
+    )
+
+    if module is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Module not found",
+        )
+
+    # -------------------------------------------------------
+    # VALIDATE SUBMISSION
+    # -------------------------------------------------------
+
     if not submission.answers:
         raise HTTPException(
             status_code=400,
             detail="At least one answer is required",
         )
 
-    correct_answers = 0
-    total_questions = len(submission.answers)
+    # -------------------------------------------------------
+    # CHECK PREVIOUS ATTEMPTS
+    # -------------------------------------------------------
 
-    for submitted_answer in submission.answers:
+    previous_attempts = (
+        db.query(QuizAttempt)
+        .filter(
+            QuizAttempt.user_id
+            == current_user.id,
+            QuizAttempt.quiz_id
+            == quiz_id,
+        )
+        .count()
+    )
+
+    if previous_attempts >= quiz.max_attempts:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Maximum quiz attempts reached. "
+                "Please redo the module."
+            ),
+        )
+
+    # -------------------------------------------------------
+    # CALCULATE SCORE
+    # -------------------------------------------------------
+
+    correct_answers = 0
+    total_questions = len(
+        submission.answers
+    )
+
+    for submitted_answer in (
+        submission.answers
+    ):
+
+        question = (
+            db.query(Question)
+            .filter(
+                Question.id
+                == submitted_answer.question_id,
+                Question.quiz_id
+                == quiz_id,
+            )
+            .first()
+        )
+
+        if question is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Question does not belong "
+                    "to this quiz"
+                ),
+            )
+
         answer = (
             db.query(Answer)
             .filter(
-                Answer.id == submitted_answer.answer_id,
-                Answer.question_id == submitted_answer.question_id,
+                Answer.id
+                == submitted_answer.answer_id,
+                Answer.question_id
+                == submitted_answer.question_id,
             )
             .first()
         )
@@ -272,12 +481,25 @@ def submit_quiz(
         if answer.is_correct:
             correct_answers += 1
 
-    score = (correct_answers / total_questions) * 100
-    passed = score >= quiz.passing_score
+    # -------------------------------------------------------
+    # SCORE
+    # -------------------------------------------------------
 
-    # Save the quiz attempt
+    score = (
+        correct_answers
+        / total_questions
+    ) * 100
+
+    passed = (
+        score >= quiz.passing_score
+    )
+
+    # -------------------------------------------------------
+    # SAVE ATTEMPT
+    # -------------------------------------------------------
+
     quiz_attempt = QuizAttempt(
-        user_id=user_id,
+        user_id=current_user.id,
         quiz_id=quiz_id,
         score=round(score),
         passed=passed,
@@ -285,40 +507,109 @@ def submit_quiz(
 
     db.add(quiz_attempt)
 
-    # Find the module associated with this quiz
+    # -------------------------------------------------------
+    # MODULE PROGRESS
+    # -------------------------------------------------------
+
     module_id = quiz.module_id
 
     module_progress = (
         db.query(ModuleProgress)
         .filter(
-            ModuleProgress.user_id == user_id,
-            ModuleProgress.module_id == module_id,
+            ModuleProgress.user_id
+            == current_user.id,
+            ModuleProgress.module_id
+            == module_id,
         )
         .first()
     )
 
     if module_progress is None:
+
         module_progress = ModuleProgress(
-            user_id=user_id,
+            user_id=current_user.id,
             module_id=module_id,
             status=(
                 ModuleProgressStatus.COMPLETED
                 if passed
                 else ModuleProgressStatus.PENDING
             ),
-            completed_at=datetime.utcnow() if passed else None,
+            completed_at=(
+                datetime.utcnow()
+                if passed
+                else None
+            ),
         )
 
         db.add(module_progress)
 
     elif passed:
-        module_progress.status = ModuleProgressStatus.COMPLETED
-        module_progress.completed_at = datetime.utcnow()
+
+        module_progress.status = (
+            ModuleProgressStatus.COMPLETED
+        )
+
+        if (
+            module_progress.completed_at
+            is None
+        ):
+            module_progress.completed_at = (
+                datetime.utcnow()
+            )
+
+    # -------------------------------------------------------
+    # ATTEMPT INFORMATION
+    # -------------------------------------------------------
+
+    attempts_used = (
+        previous_attempts + 1
+    )
+
+    attempts_remaining = max(
+        quiz.max_attempts
+        - attempts_used,
+        0,
+    )
+
+    redo_required = (
+        not passed
+        and attempts_remaining == 0
+    )
+
+    # -------------------------------------------------------
+    # DETERMINE LAST MODULE
+    # -------------------------------------------------------
+
+    total_modules = (
+        db.query(Module)
+        .filter(
+            Module.course_id
+            == module.course_id
+        )
+        .count()
+    )
+    is_last_module = (
+        module.display_order
+        == total_modules
+    )
+
+    # -------------------------------------------------------
+    # SAVE
+    # -------------------------------------------------------
 
     db.commit()
+
+    # -------------------------------------------------------
+    # RESPONSE
+    # -------------------------------------------------------
 
     return QuizResultResponse(
         score=score,
         passed=passed,
         passing_score=quiz.passing_score,
+        attempts_used=attempts_used,
+        attempts_remaining=attempts_remaining,
+        max_attempts=quiz.max_attempts,
+        redo_required=redo_required,
+        is_last_module=is_last_module,
     )

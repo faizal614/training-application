@@ -14,7 +14,9 @@ if TYPE_CHECKING:
 class Quiz(Base):
     __tablename__ = "quizzes"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(
+        primary_key=True,
+    )
 
     module_id: Mapped[int] = mapped_column(
         ForeignKey("modules.id"),
@@ -32,6 +34,12 @@ class Quiz(Base):
         nullable=False,
     )
 
+    max_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=3,
+    )
+
     module: Mapped["Module"] = relationship(
         back_populates="quiz",
     )
@@ -40,7 +48,7 @@ class Quiz(Base):
         back_populates="quiz",
         cascade="all, delete-orphan",
     )
-    
+
     attempts: Mapped[list["QuizAttempt"]] = relationship(
-    back_populates="quiz",
-)
+        back_populates="quiz",
+    )
