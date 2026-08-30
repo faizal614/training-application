@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.app.auth.authorization import require_admin
 from backend.app.auth.dependencies import get_current_user
 from backend.app.database import get_db
 from backend.app.models.answer import Answer
@@ -15,18 +16,9 @@ from backend.app.models.question import Question
 from backend.app.models.quiz import Quiz
 from backend.app.models.quiz_attempt import QuizAttempt
 from backend.app.models.user import User
-from backend.app.schemas.answer import (
-    AnswerCreate,
-    AnswerResponse,
-)
-from backend.app.schemas.question import (
-    QuestionCreate,
-    QuestionResponse,
-)
-from backend.app.schemas.quiz import (
-    QuizCreate,
-    QuizResponse,
-)
+from backend.app.schemas.answer import AnswerCreate, AnswerResponse
+from backend.app.schemas.question import QuestionCreate, QuestionResponse
+from backend.app.schemas.quiz import QuizCreate, QuizResponse
 from backend.app.schemas.quiz_attempt import (
     QuizResultResponse,
     QuizSubmission,
@@ -118,7 +110,9 @@ def get_module_quiz(
 ):
     module = (
         db.query(Module)
-        .filter(Module.id == module_id)
+        .filter(
+            Module.id == module_id
+        )
         .first()
     )
 
@@ -146,6 +140,106 @@ def get_module_quiz(
 
 
 # =========================================================
+# DELETE QUIZ
+# =========================================================
+
+@router.delete(
+    "/quiz/{quiz_id}",
+)
+def delete_quiz(
+    quiz_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+):
+    quiz = (
+        db.query(Quiz)
+        .filter(
+            Quiz.id == quiz_id
+        )
+        .first()
+    )
+
+    if quiz is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quiz not found",
+        )
+
+    module_id = quiz.module_id
+
+    # -----------------------------------------------------
+    # FIND QUESTIONS
+    # -----------------------------------------------------
+
+    questions = (
+        db.query(Question)
+        .filter(
+            Question.quiz_id == quiz_id
+        )
+        .all()
+    )
+
+    question_ids = [
+        question.id
+        for question in questions
+    ]
+
+    # -----------------------------------------------------
+    # DELETE ANSWERS
+    # -----------------------------------------------------
+
+    if question_ids:
+        db.query(Answer).filter(
+            Answer.question_id.in_(question_ids)
+        ).delete(
+            synchronize_session=False
+        )
+
+    # -----------------------------------------------------
+    # DELETE QUESTIONS
+    # -----------------------------------------------------
+
+    db.query(Question).filter(
+        Question.quiz_id == quiz_id
+    ).delete(
+        synchronize_session=False
+    )
+
+    # -----------------------------------------------------
+    # DELETE QUIZ ATTEMPTS
+    # -----------------------------------------------------
+
+    db.query(QuizAttempt).filter(
+        QuizAttempt.quiz_id == quiz_id
+    ).delete(
+        synchronize_session=False
+    )
+
+    # -----------------------------------------------------
+    # DELETE QUIZ
+    # -----------------------------------------------------
+
+    db.delete(quiz)
+
+    try:
+        db.commit()
+
+    except Exception:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete quiz",
+        )
+
+    return {
+        "message": "Quiz deleted successfully",
+        "quiz_id": quiz_id,
+        "module_id": module_id,
+    }
+
+
+# =========================================================
 # CREATE QUESTION
 # =========================================================
 
@@ -160,7 +254,9 @@ def create_question(
 ):
     quiz = (
         db.query(Quiz)
-        .filter(Quiz.id == quiz_id)
+        .filter(
+            Quiz.id == quiz_id
+        )
         .first()
     )
 
@@ -184,20 +280,47 @@ def create_question(
 
 
 # =========================================================
-# GET QUESTIONS
+# GET QUIZ QUESTIONS
+# =========================================================
+#
+# IMPORTANT:
+#
+# We intentionally build the response manually here.
+#
+# The previous implementation returned Question objects
+# directly using QuestionResponse. If AnswerResponse does
+# not expose "is_correct", FastAPI/Pydantic removes that
+# field from the JSON response.
+#
+# This endpoint explicitly includes:
+#
+#     answer_text
+#     is_correct
+#     display_order
+#
+# so the frontend can correctly display:
+#
+#     Correct
+#     Incorrect
+#
 # =========================================================
 
 @router.get(
     "/quizzes/{quiz_id}/questions",
-    response_model=list[QuestionResponse],
 )
 def get_quiz_questions(
     quiz_id: int,
     db: Session = Depends(get_db),
 ):
+    # -----------------------------------------------------
+    # FIND QUIZ
+    # -----------------------------------------------------
+
     quiz = (
         db.query(Quiz)
-        .filter(Quiz.id == quiz_id)
+        .filter(
+            Quiz.id == quiz_id
+        )
         .first()
     )
 
@@ -207,7 +330,11 @@ def get_quiz_questions(
             detail="Quiz not found",
         )
 
-    return (
+    # -----------------------------------------------------
+    # GET QUESTIONS
+    # -----------------------------------------------------
+
+    questions = (
         db.query(Question)
         .filter(
             Question.quiz_id == quiz_id
@@ -217,6 +344,57 @@ def get_quiz_questions(
         )
         .all()
     )
+
+    # -----------------------------------------------------
+    # BUILD RESPONSE
+    # -----------------------------------------------------
+
+    result = []
+
+    for question in questions:
+
+        # Get answers belonging to this question.
+        answers = (
+            db.query(Answer)
+            .filter(
+                Answer.question_id == question.id
+            )
+            .order_by(
+                Answer.display_order
+            )
+            .all()
+        )
+
+        question_data = {
+            "id": question.id,
+            "quiz_id": question.quiz_id,
+            "question_text": question.question_text,
+            "display_order": question.display_order,
+            "answers": [],
+        }
+
+        # -------------------------------------------------
+        # ADD ANSWERS
+        # -------------------------------------------------
+
+        for answer in answers:
+
+            question_data["answers"].append(
+                {
+                    "id": answer.id,
+                    "question_id": answer.question_id,
+                    "answer_text": answer.answer_text,
+
+                    # THIS IS THE IMPORTANT FIX
+                    "is_correct": bool(answer.is_correct),
+
+                    "display_order": answer.display_order,
+                }
+            )
+
+        result.append(question_data)
+
+    return result
 
 
 # =========================================================
@@ -232,6 +410,10 @@ def create_answer(
     answer_data: AnswerCreate,
     db: Session = Depends(get_db),
 ):
+    # -----------------------------------------------------
+    # FIND QUESTION
+    # -----------------------------------------------------
+
     question = (
         db.query(Question)
         .filter(
@@ -245,6 +427,10 @@ def create_answer(
             status_code=404,
             detail="Question not found",
         )
+
+    # -----------------------------------------------------
+    # CREATE ANSWER
+    # -----------------------------------------------------
 
     answer = Answer(
         question_id=question_id,
@@ -274,6 +460,10 @@ def reset_quiz_attempts(
     ),
     db: Session = Depends(get_db),
 ):
+    # -----------------------------------------------------
+    # FIND MODULE
+    # -----------------------------------------------------
+
     module = (
         db.query(Module)
         .filter(
@@ -287,6 +477,10 @@ def reset_quiz_attempts(
             status_code=404,
             detail="Module not found",
         )
+
+    # -----------------------------------------------------
+    # FIND QUIZ
+    # -----------------------------------------------------
 
     quiz = (
         db.query(Quiz)
@@ -302,6 +496,10 @@ def reset_quiz_attempts(
             detail="Quiz not found",
         )
 
+    # -----------------------------------------------------
+    # DELETE PREVIOUS ATTEMPTS
+    # -----------------------------------------------------
+
     attempts = (
         db.query(QuizAttempt)
         .filter(
@@ -315,6 +513,10 @@ def reset_quiz_attempts(
 
     for attempt in attempts:
         db.delete(attempt)
+
+    # -----------------------------------------------------
+    # RESET MODULE PROGRESS
+    # -----------------------------------------------------
 
     module_progress = (
         db.query(ModuleProgress)
@@ -358,9 +560,9 @@ def submit_quiz(
     ),
     db: Session = Depends(get_db),
 ):
-    # -------------------------------------------------------
+    # -----------------------------------------------------
     # FIND QUIZ
-    # -------------------------------------------------------
+    # -----------------------------------------------------
 
     quiz = (
         db.query(Quiz)
@@ -376,9 +578,9 @@ def submit_quiz(
             detail="Quiz not found",
         )
 
-    # -------------------------------------------------------
+    # -----------------------------------------------------
     # FIND MODULE
-    # -------------------------------------------------------
+    # -----------------------------------------------------
 
     module = (
         db.query(Module)
@@ -394,9 +596,9 @@ def submit_quiz(
             detail="Module not found",
         )
 
-    # -------------------------------------------------------
+    # -----------------------------------------------------
     # VALIDATE SUBMISSION
-    # -------------------------------------------------------
+    # -----------------------------------------------------
 
     if not submission.answers:
         raise HTTPException(
@@ -404,9 +606,9 @@ def submit_quiz(
             detail="At least one answer is required",
         )
 
-    # -------------------------------------------------------
+    # -----------------------------------------------------
     # CHECK PREVIOUS ATTEMPTS
-    # -------------------------------------------------------
+    # -----------------------------------------------------
 
     previous_attempts = (
         db.query(QuizAttempt)
@@ -428,18 +630,21 @@ def submit_quiz(
             ),
         )
 
-    # -------------------------------------------------------
+    # -----------------------------------------------------
     # CALCULATE SCORE
-    # -------------------------------------------------------
+    # -----------------------------------------------------
 
     correct_answers = 0
+
     total_questions = len(
         submission.answers
     )
 
-    for submitted_answer in (
-        submission.answers
-    ):
+    for submitted_answer in submission.answers:
+
+        # -------------------------------------------------
+        # CHECK QUESTION
+        # -------------------------------------------------
 
         question = (
             db.query(Question)
@@ -461,6 +666,10 @@ def submit_quiz(
                 ),
             )
 
+        # -------------------------------------------------
+        # CHECK ANSWER
+        # -------------------------------------------------
+
         answer = (
             db.query(Answer)
             .filter(
@@ -478,12 +687,16 @@ def submit_quiz(
                 detail="Invalid answer submitted",
             )
 
+        # -------------------------------------------------
+        # CHECK CORRECTNESS
+        # -------------------------------------------------
+
         if answer.is_correct:
             correct_answers += 1
 
-    # -------------------------------------------------------
+    # -----------------------------------------------------
     # SCORE
-    # -------------------------------------------------------
+    # -----------------------------------------------------
 
     score = (
         correct_answers
@@ -494,9 +707,9 @@ def submit_quiz(
         score >= quiz.passing_score
     )
 
-    # -------------------------------------------------------
-    # SAVE ATTEMPT
-    # -------------------------------------------------------
+    # -----------------------------------------------------
+    # SAVE QUIZ ATTEMPT
+    # -----------------------------------------------------
 
     quiz_attempt = QuizAttempt(
         user_id=current_user.id,
@@ -507,9 +720,9 @@ def submit_quiz(
 
     db.add(quiz_attempt)
 
-    # -------------------------------------------------------
-    # MODULE PROGRESS
-    # -------------------------------------------------------
+    # -----------------------------------------------------
+    # FIND MODULE PROGRESS
+    # -----------------------------------------------------
 
     module_id = quiz.module_id
 
@@ -523,6 +736,10 @@ def submit_quiz(
         )
         .first()
     )
+
+    # -----------------------------------------------------
+    # UPDATE MODULE PROGRESS
+    # -----------------------------------------------------
 
     if module_progress is None:
 
@@ -557,9 +774,9 @@ def submit_quiz(
                 datetime.utcnow()
             )
 
-    # -------------------------------------------------------
+    # -----------------------------------------------------
     # ATTEMPT INFORMATION
-    # -------------------------------------------------------
+    # -----------------------------------------------------
 
     attempts_used = (
         previous_attempts + 1
@@ -576,9 +793,9 @@ def submit_quiz(
         and attempts_remaining == 0
     )
 
-    # -------------------------------------------------------
+    # -----------------------------------------------------
     # DETERMINE LAST MODULE
-    # -------------------------------------------------------
+    # -----------------------------------------------------
 
     total_modules = (
         db.query(Module)
@@ -588,20 +805,21 @@ def submit_quiz(
         )
         .count()
     )
+
     is_last_module = (
         module.display_order
         == total_modules
     )
 
-    # -------------------------------------------------------
-    # SAVE
-    # -------------------------------------------------------
+    # -----------------------------------------------------
+    # SAVE EVERYTHING
+    # -----------------------------------------------------
 
     db.commit()
 
-    # -------------------------------------------------------
+    # -----------------------------------------------------
     # RESPONSE
-    # -------------------------------------------------------
+    # -----------------------------------------------------
 
     return QuizResultResponse(
         score=score,

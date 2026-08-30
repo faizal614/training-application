@@ -15,11 +15,16 @@ from backend.app.schemas.auth import (
 )
 from backend.app.auth.dependencies import get_current_user
 
+
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],
 )
 
+
+# =========================================================
+# SIGN UP
+# =========================================================
 
 @router.post(
     "/signup",
@@ -45,7 +50,10 @@ def signup(
     user = User(
         name=user_data.name,
         email=user_data.email,
-        password_hash=hash_password(user_data.password),
+        password_hash=hash_password(
+            user_data.password
+        ),
+        is_active=True,
     )
 
     db.add(user)
@@ -60,6 +68,10 @@ def signup(
         user_id=user.id,
     )
 
+
+# =========================================================
+# SIGN IN
+# =========================================================
 
 @router.post(
     "/signin",
@@ -90,6 +102,16 @@ def signin(
             detail="Invalid email or password",
         )
 
+    # -----------------------------------------------------
+    # CHECK ACCOUNT STATUS
+    # -----------------------------------------------------
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been deactivated. Please contact an administrator.",
+        )
+
     access_token = create_access_token(user.id)
 
     return AuthResponse(
@@ -97,6 +119,12 @@ def signin(
         token_type="bearer",
         user_id=user.id,
     )
+
+
+# =========================================================
+# CURRENT USER
+# =========================================================
+
 @router.get("/me")
 def get_me(
     current_user: User = Depends(get_current_user),
@@ -106,4 +134,5 @@ def get_me(
         "name": current_user.name,
         "email": current_user.email,
         "role": current_user.role,
+        "is_active": current_user.is_active,
     }

@@ -22,11 +22,30 @@ function ModulePage() {
     handleSessionExpired,
   } = useAuth()
 
+  // =========================================================
+  // MODULE
+  // =========================================================
+
   const [module, setModule] = useState(null)
+  const [modules, setModules] = useState([])
   const [content, setContent] = useState([])
+
+  // =========================================================
+  // PROGRESS
+  // =========================================================
+
+  const [moduleCompleted, setModuleCompleted] =
+    useState(false)
 
   const [courseCompleted, setCourseCompleted] =
     useState(false)
+
+  const [nextModule, setNextModule] =
+    useState(null)
+
+  // =========================================================
+  // PAGE STATE
+  // =========================================================
 
   const [loading, setLoading] =
     useState(true)
@@ -35,7 +54,7 @@ function ModulePage() {
     useState('')
 
   // =========================================================
-  // LOAD MODULE + CHECK COURSE COMPLETION
+  // LOAD MODULE
   // =========================================================
 
   useEffect(() => {
@@ -57,9 +76,9 @@ function ModulePage() {
           return
         }
 
-        // ---------------------------------------------------
+        // ===================================================
         // GET COURSE MODULES
-        // ---------------------------------------------------
+        // ===================================================
 
         const modulesResponse =
           await apiFetch(
@@ -78,23 +97,43 @@ function ModulePage() {
           )
         }
 
-        const foundModule =
-          modulesData.find(
+        setModules(modulesData)
+
+        // ---------------------------------------------------
+        // FIND CURRENT MODULE
+        // ---------------------------------------------------
+
+        const currentModuleIndex =
+          modulesData.findIndex(
             (item) =>
               item.id === Number(moduleId)
           )
 
-        if (!foundModule) {
+        if (currentModuleIndex === -1) {
           throw new Error(
             'Module not found'
           )
         }
 
+        const foundModule =
+          modulesData[currentModuleIndex]
+
         setModule(foundModule)
 
         // ---------------------------------------------------
-        // GET MODULE CONTENT
+        // FIND NEXT MODULE
         // ---------------------------------------------------
+
+        const followingModule =
+          modulesData[
+            currentModuleIndex + 1
+          ] || null
+
+        setNextModule(followingModule)
+
+        // ===================================================
+        // GET MODULE CONTENT
+        // ===================================================
 
         const contentResponse =
           await apiFetch(
@@ -115,9 +154,51 @@ function ModulePage() {
 
         setContent(contentData)
 
+        // ===================================================
+        // GET COURSE PROGRESS
+        // ===================================================
+
+        const progressResponse =
+          await apiFetch(
+            `/courses/${courseId}/progress`,
+            {},
+            handleSessionExpired
+          )
+
+        const progressData =
+          await progressResponse.json()
+
+        if (!progressResponse.ok) {
+          throw new Error(
+            progressData.detail ||
+              'Failed to load course progress'
+          )
+        }
+
         // ---------------------------------------------------
-        // CHECK WHETHER COURSE IS ALREADY COMPLETED
+        // CHECK CURRENT MODULE
         // ---------------------------------------------------
+
+        const currentModuleProgress =
+          Array.isArray(progressData.modules)
+            ? progressData.modules.find(
+                (item) =>
+                  item.module_id ===
+                  Number(moduleId)
+              )
+            : null
+
+        const currentModuleCompleted =
+          currentModuleProgress?.status ===
+          'completed'
+
+        setModuleCompleted(
+          currentModuleCompleted
+        )
+
+        // ===================================================
+        // CHECK COURSE CERTIFICATE
+        // ===================================================
 
         try {
           const certificateResponse =
@@ -128,7 +209,7 @@ function ModulePage() {
             )
 
           // -------------------------------------------------
-          // CERTIFICATE NOT FOUND
+          // NO CERTIFICATE
           // -------------------------------------------------
 
           if (
@@ -140,8 +221,6 @@ function ModulePage() {
               await certificateResponse.json()
 
             if (!certificateResponse.ok) {
-              // Do not prevent the module from loading
-              // if certificate checking fails.
               setCourseCompleted(false)
             } else {
               const existingCertificate =
@@ -159,9 +238,6 @@ function ModulePage() {
             }
           }
         } catch (certificateError) {
-          // Certificate checking should never
-          // prevent access to module content.
-
           if (
             certificateError.message ===
             'Session expired. Please sign in again.'
@@ -196,21 +272,34 @@ function ModulePage() {
   ])
 
   // =========================================================
-  // FINISH MODULE
+  // NEXT MODULE
   // =========================================================
 
-  const handleFinishModule = () => {
-    // -------------------------------------------------------
-    // SAFETY CHECK
-    // -------------------------------------------------------
-
-    if (courseCompleted) {
-      navigate(
-        `/courses/${courseId}/certificate`
-      )
+  const handleNextModule = () => {
+    if (!nextModule) {
       return
     }
 
+    navigate(
+      `/courses/${courseId}/modules/${nextModule.id}`
+    )
+  }
+
+  // =========================================================
+  // VIEW CERTIFICATE
+  // =========================================================
+
+  const handleViewCertificate = () => {
+    navigate(
+      `/courses/${courseId}/certificate`
+    )
+  }
+
+  // =========================================================
+  // ATTEMPT QUIZ
+  // =========================================================
+
+  const handleAttemptQuiz = () => {
     navigate(
       `/courses/${courseId}/modules/${moduleId}/quiz`
     )
@@ -331,10 +420,89 @@ function ModulePage() {
       </section>
 
       {/* =====================================================
-          QUIZ SECTION
+          COMPLETED MODULE
       ===================================================== */}
 
-      {!courseCompleted && (
+      {moduleCompleted && (
+        <section className="quiz-result quiz-result--passed">
+
+          <p className="eyebrow">
+            MODULE COMPLETED
+          </p>
+
+          <h2>
+            You have completed this module
+          </h2>
+
+          {/* -------------------------------------------------
+              HAS NEXT MODULE
+          ------------------------------------------------- */}
+
+          {nextModule && (
+            <>
+              <p>
+                Congratulations! You have
+                successfully completed this
+                module.
+              </p>
+
+              <p>
+                Continue to the next module:
+                {' '}
+                <strong>
+                  {nextModule.title}
+                </strong>
+              </p>
+
+              <button
+                type="button"
+                className="auth-button"
+                onClick={
+                  handleNextModule
+                }
+              >
+                Next Module →
+              </button>
+            </>
+          )}
+
+          {/* -------------------------------------------------
+              LAST MODULE
+          ------------------------------------------------- */}
+
+          {!nextModule && (
+            <>
+              <p>
+                Congratulations! You have
+                completed the final module of
+                this course.
+              </p>
+
+              <p>
+                You have completed all modules.
+                Your certificate is ready.
+              </p>
+
+              <button
+                type="button"
+                className="auth-button"
+                onClick={
+                  handleViewCertificate
+                }
+              >
+                View Certificate
+              </button>
+            </>
+          )}
+
+        </section>
+      )}
+
+      {/* =====================================================
+          MODULE NOT COMPLETED
+      ===================================================== */}
+
+      {!moduleCompleted && (
         <section className="quiz-result">
 
           <h2>
@@ -342,51 +510,18 @@ function ModulePage() {
           </h2>
 
           <p>
-            When you are finished studying this
-            module, continue to the quiz.
+            When you are finished studying
+            this module, continue to the quiz.
           </p>
 
           <button
             type="button"
             className="auth-button"
-            onClick={handleFinishModule}
-          >
-            Attempt Quiz
-          </button>
-
-        </section>
-      )}
-
-      {/* =====================================================
-          COURSE COMPLETED MESSAGE
-      ===================================================== */}
-
-      {courseCompleted && (
-        <section className="quiz-result quiz-result--passed">
-
-          <p className="eyebrow">
-            COURSE COMPLETED
-          </p>
-
-          <h2>
-            Course Completed
-          </h2>
-
-          <p>
-            You have already completed this
-            course and earned your certificate.
-          </p>
-
-          <button
-            type="button"
-            className="auth-button"
-            onClick={() =>
-              navigate(
-                `/courses/${courseId}/certificate`
-              )
+            onClick={
+              handleAttemptQuiz
             }
           >
-            View Certificate
+            Attempt Quiz
           </button>
 
         </section>

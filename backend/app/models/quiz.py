@@ -40,15 +40,28 @@ class Quiz(Base):
         default=3,
     )
 
+    # -----------------------------------------------------
+    # MODULE
+    # -----------------------------------------------------
+
     module: Mapped["Module"] = relationship(
         back_populates="quiz",
     )
+
+    # -----------------------------------------------------
+    # QUESTIONS
+    # -----------------------------------------------------
 
     questions: Mapped[list["Question"]] = relationship(
         back_populates="quiz",
         cascade="all, delete-orphan",
     )
 
+    # -----------------------------------------------------
+    # QUIZ ATTEMPTS
+    # -----------------------------------------------------
+
     attempts: Mapped[list["QuizAttempt"]] = relationship(
         back_populates="quiz",
+        cascade="all, delete-orphan",
     )

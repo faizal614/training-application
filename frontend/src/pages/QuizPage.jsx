@@ -40,6 +40,15 @@ function QuizPage() {
     useState(null)
 
   // =========================================================
+  // MODULE STATE
+  // =========================================================
+
+  const [modules, setModules] = useState([])
+  const [nextModule, setNextModule] = useState(null)
+  const [isLastModule, setIsLastModule] =
+    useState(false)
+
+  // =========================================================
   // PAGE STATE
   // =========================================================
 
@@ -119,6 +128,57 @@ function QuizPage() {
             }
           }
         }
+
+        // ---------------------------------------------------
+        // GET ALL COURSE MODULES
+        // ---------------------------------------------------
+
+        const modulesResponse =
+          await apiFetch(
+            `/courses/${courseId}/modules`,
+            {},
+            handleSessionExpired
+          )
+
+        const modulesData =
+          await modulesResponse.json()
+
+        if (!modulesResponse.ok) {
+          throw new Error(
+            modulesData.detail ||
+              'Failed to load modules'
+          )
+        }
+
+        setModules(modulesData)
+
+        // ---------------------------------------------------
+        // FIND CURRENT MODULE
+        // ---------------------------------------------------
+
+        const currentIndex =
+          modulesData.findIndex(
+            (module) =>
+              module.id === Number(moduleId)
+          )
+
+        if (currentIndex === -1) {
+          throw new Error(
+            'Current module could not be found.'
+          )
+        }
+
+        // ---------------------------------------------------
+        // DETERMINE NEXT MODULE
+        // ---------------------------------------------------
+
+        const followingModule =
+          modulesData[currentIndex + 1] || null
+
+        setNextModule(followingModule)
+        setIsLastModule(
+          followingModule === null
+        )
 
         // ---------------------------------------------------
         // GET QUIZ
@@ -288,7 +348,22 @@ function QuizPage() {
         )
       }
 
+      // -----------------------------------------------------
+      // SAVE RESULT
+      // -----------------------------------------------------
+
       setQuizResult(data)
+
+      // -----------------------------------------------------
+      // IMPORTANT
+      //
+      // We DO NOT use:
+      //
+      // data.is_last_module
+      //
+      // The frontend already knows whether another module
+      // exists because we loaded the course modules above.
+      // -----------------------------------------------------
 
     } catch (error) {
       if (
@@ -313,6 +388,26 @@ function QuizPage() {
       setSubmitting(true)
       setError('')
 
+      // -----------------------------------------------------
+      // If next module was already determined when the page
+      // loaded, use it directly.
+      // -----------------------------------------------------
+
+      if (nextModule) {
+        navigate(
+          `/courses/${courseId}/modules/${nextModule.id}`
+        )
+
+        return
+      }
+
+      // -----------------------------------------------------
+      // FALLBACK
+      //
+      // If nextModule is not available, reload the module
+      // list before deciding.
+      // -----------------------------------------------------
+
       const response =
         await apiFetch(
           `/courses/${courseId}/modules`,
@@ -320,21 +415,20 @@ function QuizPage() {
           handleSessionExpired
         )
 
-      const modules =
+      const modulesData =
         await response.json()
 
       if (!response.ok) {
         throw new Error(
-          modules.detail ||
+          modulesData.detail ||
             'Failed to load modules'
         )
       }
 
       const currentIndex =
-        modules.findIndex(
+        modulesData.findIndex(
           (module) =>
-            module.id ===
-            Number(moduleId)
+            module.id === Number(moduleId)
         )
 
       if (currentIndex === -1) {
@@ -343,19 +437,26 @@ function QuizPage() {
         )
       }
 
-      const nextModule =
-        modules[currentIndex + 1]
+      const followingModule =
+        modulesData[currentIndex + 1]
 
-      if (!nextModule) {
+      // -----------------------------------------------------
+      // THERE IS ANOTHER MODULE
+      // -----------------------------------------------------
+
+      if (followingModule) {
         navigate(
-          `/courses/${courseId}`
+          `/courses/${courseId}/modules/${followingModule.id}`
         )
+
         return
       }
 
-      navigate(
-        `/courses/${courseId}/modules/${nextModule.id}`
-      )
+      // -----------------------------------------------------
+      // NO NEXT MODULE
+      // -----------------------------------------------------
+
+      setIsLastModule(true)
 
     } catch (error) {
       if (
@@ -738,7 +839,40 @@ function QuizPage() {
                 completed this module.
               </p>
 
-              {quizResult.is_last_module ? (
+              {/* =============================================
+                  THERE IS ANOTHER MODULE
+              ============================================= */}
+
+              {!isLastModule && nextModule && (
+                <>
+
+                  <p>
+                    The quiz for this module is
+                    complete. Continue to the next
+                    module.
+                  </p>
+
+                  <button
+                    type="button"
+                    className="auth-button"
+                    onClick={
+                      handleNextModule
+                    }
+                    disabled={submitting}
+                  >
+                    {submitting
+                      ? 'Loading...'
+                      : 'Next Module →'}
+                  </button>
+
+                </>
+              )}
+
+              {/* =============================================
+                  THIS IS THE FINAL MODULE
+              ============================================= */}
+
+              {isLastModule && (
                 <>
 
                   <p>
@@ -760,19 +894,6 @@ function QuizPage() {
                   </button>
 
                 </>
-              ) : (
-                <button
-                  type="button"
-                  className="auth-button"
-                  onClick={
-                    handleNextModule
-                  }
-                  disabled={submitting}
-                >
-                  {submitting
-                    ? 'Loading...'
-                    : 'Next Module →'}
-                </button>
               )}
 
             </>
@@ -868,4 +989,4 @@ function QuizPage() {
   )
 }
 
-export default QuizPage
+export default QuizPage 

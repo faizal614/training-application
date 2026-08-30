@@ -11,8 +11,21 @@ import SignUp from './pages/SignUp'
 import Certificate from './pages/Certificate'
 import ModulePage from './pages/ModulePage'
 import CertificatePage from './pages/CertificatePage'
+
 import AdminDashboard from './pages/AdminDashboard'
-import AdminInstructors from './pages/AdminInstructors'
+import InstructorManagement from './pages/admin/InstructorManagement'
+import CreateInstructor from './pages/admin/CreateInstructor'
+import ManageInstructors from './pages/admin/ManageInstructors'
+import AssignInstructorCourses from './pages/admin/AssignInstructorCourses'
+import InstructorCourses from './pages/admin/InstructorCourses'
+import InstructorAccess from './pages/admin/InstructorAccess'
+import ManageCourses from './pages/admin/ManageCourses'
+import ManageModules from './pages/admin/ManageModules'
+import ManageContent from "./pages/admin/ManageContent";
+import ManageQuiz from './pages/admin/ManageQuiz'
+import ManageLearners from './pages/admin/ManageLearners'
+import Progress from './pages/admin/Progress'
+import Certificates from './pages/admin/Certificates'
 
 import './App.css'
 
@@ -23,18 +36,24 @@ function App() {
 
       <Routes>
 
-        {/* HOME */}
+        {/* =====================================================
+            HOME
+        ===================================================== */}
+
         <Route
           path="/"
           element={
             <Navigate
-              to="/courses"
+              to="/signin"
               replace
             />
           }
         />
 
-        {/* AUTHENTICATION */}
+        {/* =====================================================
+            AUTHENTICATION
+        ===================================================== */}
+
         <Route
           path="/signin"
           element={<SignIn />}
@@ -45,7 +64,10 @@ function App() {
           element={<SignUp />}
         />
 
-        {/* COURSES */}
+        {/* =====================================================
+            LEARNER - COURSES
+        ===================================================== */}
+
         <Route
           path="/courses"
           element={<Courses />}
@@ -56,28 +78,13 @@ function App() {
           element={<CourseDetails />}
         />
 
-        {/* MODULE */}
+        {/* =====================================================
+            LEARNER - MODULES
+        ===================================================== */}
+
         <Route
           path="/modules/:moduleId"
           element={<ModuleDetails />}
-        />
-
-        {/* QUIZ */}
-        <Route
-          path="/modules/:moduleId/quiz"
-          element={<QuizPage />}
-        />
-
-        {/* CERTIFICATE */}
-        <Route
-          path="/certificates/:certificateNumber"
-          element={<Certificate />}
-        />
-
-        {/* EXISTING COURSE ROUTES */}
-        <Route
-          path="/courses/:courseId"
-          element={<CourseDetails />}
         />
 
         <Route
@@ -85,9 +92,27 @@ function App() {
           element={<ModulePage />}
         />
 
+        {/* =====================================================
+            LEARNER - QUIZ
+        ===================================================== */}
+
+        <Route
+          path="/modules/:moduleId/quiz"
+          element={<QuizPage />}
+        />
+
         <Route
           path="/courses/:courseId/modules/:moduleId/quiz"
           element={<QuizPage />}
+        />
+
+        {/* =====================================================
+            LEARNER - CERTIFICATES
+        ===================================================== */}
+
+        <Route
+          path="/certificates/:certificateNumber"
+          element={<Certificate />}
         />
 
         <Route
@@ -95,19 +120,82 @@ function App() {
           element={<CertificatePage />}
         />
 
-        {/* =================================================
-            ADMIN
-        ================================================= */}
+        {/* =====================================================
+            ADMIN DASHBOARD
+        ===================================================== */}
 
         <Route
           path="/admin"
           element={<AdminDashboard />}
         />
 
+        {/* =====================================================
+            ADMIN - INSTRUCTOR MANAGEMENT
+        ===================================================== */}
+
         <Route
           path="/admin/instructors"
-          element={<AdminInstructors />}
+          element={<InstructorManagement />}
         />
+
+        <Route
+          path="/admin/instructors/create"
+          element={<CreateInstructor />}
+        />
+
+        <Route
+          path="/admin/instructors/manage"
+          element={<ManageInstructors />}
+        />
+
+        <Route
+          path="/admin/instructors/assign-courses"
+          element={<AssignInstructorCourses />}
+        />
+
+        <Route
+          path="/admin/instructors/courses"
+          element={<InstructorCourses />}
+        />
+
+        <Route
+          path="/admin/instructors/access"
+          element={<InstructorAccess />}
+        />
+
+        <Route
+          path="/admin/courses"
+          element={<ManageCourses />}
+        />
+
+        <Route
+          path="/admin/modules"
+          element={<ManageModules />}
+        />
+
+        <Route
+          path="/admin/content"
+          element={<ManageContent />}
+        />
+
+        <Route
+          path="/admin/quizzes"
+          element={<ManageQuiz />}
+        />
+
+        <Route
+  path="/admin/learners"
+  element={<ManageLearners />}
+/>
+<Route
+  path="/admin/progress"
+  element={<Progress />}
+/>
+<Route
+  path="/admin/certificates"
+  element={<Certificates />}
+/>
+
 
       </Routes>
     </div>
