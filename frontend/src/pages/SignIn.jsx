@@ -15,22 +15,23 @@ function SignIn() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const [sessionExpired, setSessionExpired] =
     useState(false)
 
-  // -------------------------
+  // =========================================================
   // CHECK SESSION EXPIRATION
-  // -------------------------
+  // =========================================================
 
   useEffect(() => {
     if (location.state?.sessionExpired) {
       setSessionExpired(true)
 
-      // Remove the state so refreshing the page
-      // does not repeatedly show the message.
+      // Remove the navigation state so refreshing
+      // does not show the message again.
       window.history.replaceState(
         {},
         document.title,
@@ -39,9 +40,9 @@ function SignIn() {
     }
   }, [location])
 
-  // -------------------------
+  // =========================================================
   // SIGN IN
-  // -------------------------
+  // =========================================================
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -51,9 +52,9 @@ function SignIn() {
     setLoading(true)
 
     try {
-      // -------------------------
+      // -----------------------------------------------------
       // SIGN IN
-      // -------------------------
+      // -----------------------------------------------------
 
       const response = await fetch(
         'http://127.0.0.1:8000/auth/signin',
@@ -77,15 +78,15 @@ function SignIn() {
         )
       }
 
-      // -------------------------
+      // -----------------------------------------------------
       // STORE TOKEN
-      // -------------------------
+      // -----------------------------------------------------
 
       login(data.access_token)
 
-      // -------------------------
+      // -----------------------------------------------------
       // GET CURRENT USER
-      // -------------------------
+      // -----------------------------------------------------
 
       const meResponse = await fetch(
         'http://127.0.0.1:8000/auth/me',
@@ -106,15 +107,33 @@ function SignIn() {
         )
       }
 
-      // -------------------------
+      // -----------------------------------------------------
       // ROLE-BASED REDIRECT
-      // -------------------------
+      // -----------------------------------------------------
 
       if (userData.role === 'admin') {
         navigate('/admin')
-      } else {
-        navigate('/courses')
+        return
       }
+
+      if (userData.role === 'instructor') {
+        navigate('/instructor')
+        return
+      }
+
+      if (userData.role === 'learner') {
+        navigate('/courses')
+        return
+      }
+
+      // -----------------------------------------------------
+      // UNKNOWN ROLE
+      // -----------------------------------------------------
+
+      throw new Error(
+        'Your account has an invalid user role.'
+      )
+
     } catch (error) {
       setError(error.message)
     } finally {
@@ -122,9 +141,18 @@ function SignIn() {
     }
   }
 
+  // =========================================================
+  // PAGE
+  // =========================================================
+
   return (
     <div className="auth-page">
+
       <div className="auth-container">
+
+        {/* ===================================================
+            HEADER
+        =================================================== */}
 
         <p className="eyebrow">
           DATACALIPER TRAINING
@@ -138,16 +166,29 @@ function SignIn() {
           Continue your learning journey.
         </p>
 
+        {/* ===================================================
+            SESSION EXPIRED
+        =================================================== */}
+
         {sessionExpired && (
           <div className="auth-error">
             Session expired. Please sign in again.
           </div>
         )}
 
+        {/* ===================================================
+            FORM
+        =================================================== */}
+
         <form
           onSubmit={handleSubmit}
           className="auth-form"
         >
+
+          {/* -------------------------------------------------
+              EMAIL
+          ------------------------------------------------- */}
+
           <label htmlFor="email">
             Email
           </label>
@@ -160,8 +201,13 @@ function SignIn() {
               setEmail(event.target.value)
             }
             placeholder="you@example.com"
+            autoComplete="email"
             required
           />
+
+          {/* -------------------------------------------------
+              PASSWORD
+          ------------------------------------------------- */}
 
           <label htmlFor="password">
             Password
@@ -175,14 +221,23 @@ function SignIn() {
               setPassword(event.target.value)
             }
             placeholder="Enter your password"
+            autoComplete="current-password"
             required
           />
+
+          {/* -------------------------------------------------
+              ERROR
+          ------------------------------------------------- */}
 
           {error && (
             <p className="auth-error">
               {error}
             </p>
           )}
+
+          {/* -------------------------------------------------
+              SUBMIT
+          ------------------------------------------------- */}
 
           <button
             type="submit"
@@ -193,7 +248,12 @@ function SignIn() {
               ? 'Signing in...'
               : 'Sign in'}
           </button>
+
         </form>
+
+        {/* ===================================================
+            FOOTER
+        =================================================== */}
 
         <p className="auth-footer">
           Don't have an account?{' '}
@@ -204,6 +264,7 @@ function SignIn() {
         </p>
 
       </div>
+
     </div>
   )
 }

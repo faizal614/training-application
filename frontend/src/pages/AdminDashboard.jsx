@@ -250,11 +250,7 @@ function AdminDashboard() {
           BACK
       ===================================================== */}
 
-      <p>
-        <Link to="/courses">
-          ← Back to courses
-        </Link>
-      </p>
+      
     </main>
   )
 }

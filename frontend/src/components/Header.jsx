@@ -10,9 +10,7 @@ function Header() {
   return (
     <header className="site-header">
       <div className="site-header__brand">
-        
-          DATACALIPER
-
+        DATACALIPER
         <span>TRAINING</span>
       </div>
 

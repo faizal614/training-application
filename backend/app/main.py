@@ -11,6 +11,8 @@ from backend.app.routers.certificates import router as certificates_router
 import backend.app.models
 from backend.app.routers.auth import router as auth_router
 from backend.app.routers.admin import router as admin_router
+from backend.app.routers.instructor import router as instructor_router
+
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="DataCaliper Training API")
@@ -34,7 +36,7 @@ app.include_router(training_content_router)
 app.include_router(certificates_router)
 
 app.include_router(admin_router)
-
+app.include_router(instructor_router)
 @app.get("/")
 def root():
     return {"message": "DataCaliper Training API is running"}

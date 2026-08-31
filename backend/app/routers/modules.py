@@ -4,11 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend.app.auth.authorization import require_admin, require_instructor_or_admin
+from backend.app.auth.authorization import (
+    require_admin,
+    require_instructor_or_admin,
+)
 from backend.app.auth.dependencies import get_current_user
 from backend.app.database import get_db
 
 from backend.app.models.course import Course
+from backend.app.models.course_assignment import CourseAssignment
 from backend.app.models.module import Module
 from backend.app.models.module_progress import (
     ModuleProgress,
@@ -17,16 +21,58 @@ from backend.app.models.module_progress import (
 from backend.app.models.question import Question
 from backend.app.models.quiz import Quiz
 from backend.app.models.quiz_attempt import QuizAttempt
-from backend.app.models.user import User
+from backend.app.models.user import User, UserRole
 
-from backend.app.schemas.module import ModuleCreate, ModuleResponse
-from backend.app.schemas.module_progress import ModuleProgressResponse
+from backend.app.schemas.module import (
+    ModuleCreate,
+    ModuleResponse,
+)
+from backend.app.schemas.module_progress import (
+    ModuleProgressResponse,
+)
 
 
 router = APIRouter(
     prefix="/courses",
     tags=["Modules"],
 )
+
+
+# =========================================================
+# HELPER
+# =========================================================
+
+def check_module_access(
+    module: Module,
+    current_user: User,
+    db: Session,
+):
+    """
+    Admins can manage every module.
+
+    Instructors can only manage modules belonging
+    to courses assigned to them.
+    """
+
+    if current_user.role == UserRole.ADMIN:
+        return
+
+    assignment = (
+        db.query(CourseAssignment)
+        .filter(
+            CourseAssignment.course_id
+            == module.course_id,
+            CourseAssignment.user_id
+            == current_user.id,
+        )
+        .first()
+    )
+
+    if assignment is None:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have access to this module",
+        )
 
 
 # =========================================================
@@ -41,11 +87,19 @@ def create_module(
     course_id: int,
     module_data: ModuleCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_instructor_or_admin),
+    current_user: User = Depends(
+        require_instructor_or_admin
+    ),
 ):
+    # -----------------------------------------------------
+    # CHECK COURSE
+    # -----------------------------------------------------
+
     course = (
         db.query(Course)
-        .filter(Course.id == course_id)
+        .filter(
+            Course.id == course_id
+        )
         .first()
     )
 
@@ -54,6 +108,33 @@ def create_module(
             status_code=404,
             detail="Course not found",
         )
+
+    # -----------------------------------------------------
+    # CHECK INSTRUCTOR ACCESS
+    # -----------------------------------------------------
+
+    if current_user.role != UserRole.ADMIN:
+
+        assignment = (
+            db.query(CourseAssignment)
+            .filter(
+                CourseAssignment.course_id
+                == course_id,
+                CourseAssignment.user_id
+                == current_user.id,
+            )
+            .first()
+        )
+
+        if assignment is None:
+            raise HTTPException(
+                status_code=403,
+                detail="This course is not assigned to you",
+            )
+
+    # -----------------------------------------------------
+    # CREATE
+    # -----------------------------------------------------
 
     module = Module(
         course_id=course_id,
@@ -82,7 +163,9 @@ def get_course_modules(
 ):
     course = (
         db.query(Course)
-        .filter(Course.id == course_id)
+        .filter(
+            Course.id == course_id
+        )
         .first()
     )
 
@@ -94,8 +177,12 @@ def get_course_modules(
 
     return (
         db.query(Module)
-        .filter(Module.course_id == course_id)
-        .order_by(Module.display_order)
+        .filter(
+            Module.course_id == course_id
+        )
+        .order_by(
+            Module.display_order
+        )
         .all()
     )
 
@@ -114,7 +201,9 @@ def get_module(
 ):
     module = (
         db.query(Module)
-        .filter(Module.id == module_id)
+        .filter(
+            Module.id == module_id
+        )
         .first()
     )
 
@@ -123,6 +212,63 @@ def get_module(
             status_code=404,
             detail="Module not found",
         )
+
+    return module
+
+
+# =========================================================
+# UPDATE MODULE
+# =========================================================
+
+@router.put(
+    "/modules/{module_id}",
+    response_model=ModuleResponse,
+)
+def update_module(
+    module_id: int,
+    module_data: ModuleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_instructor_or_admin
+    ),
+):
+    module = (
+        db.query(Module)
+        .filter(
+            Module.id == module_id
+        )
+        .first()
+    )
+
+    if module is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Module not found",
+        )
+
+    check_module_access(
+        module,
+        current_user,
+        db,
+    )
+
+    if not module_data.title.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Module title is required",
+        )
+
+    if module_data.display_order < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Display order must be at least 1",
+        )
+
+    module.title = module_data.title.strip()
+    module.display_order = module_data.display_order
+
+    db.commit()
+    db.refresh(module)
 
     return module
 
@@ -137,12 +283,16 @@ def get_module(
 )
 def get_module_progress(
     module_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
     db: Session = Depends(get_db),
 ):
     module = (
         db.query(Module)
-        .filter(Module.id == module_id)
+        .filter(
+            Module.id == module_id
+        )
         .first()
     )
 
@@ -180,12 +330,16 @@ def get_module_progress(
 )
 def complete_module_progress(
     module_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
     db: Session = Depends(get_db),
 ):
     module = (
         db.query(Module)
-        .filter(Module.id == module_id)
+        .filter(
+            Module.id == module_id
+        )
         .first()
     )
 
@@ -204,10 +358,6 @@ def complete_module_progress(
         .first()
     )
 
-    # -----------------------------------------------------
-    # CREATE PROGRESS IF IT DOES NOT EXIST
-    # -----------------------------------------------------
-
     if progress is None:
         progress = ModuleProgress(
             user_id=current_user.id,
@@ -218,12 +368,10 @@ def complete_module_progress(
 
         db.add(progress)
 
-    # -----------------------------------------------------
-    # UPDATE EXISTING PROGRESS
-    # -----------------------------------------------------
-
     else:
-        progress.status = ModuleProgressStatus.COMPLETED
+        progress.status = (
+            ModuleProgressStatus.COMPLETED
+        )
 
         if progress.completed_at is None:
             progress.completed_at = datetime.utcnow()
@@ -237,19 +385,6 @@ def complete_module_progress(
 # =========================================================
 # DELETE MODULE
 # =========================================================
-#
-# Deletion order:
-#
-# Module
-#   └── Quiz
-#        ├── Quiz Attempts
-#        └── Questions
-#             └── Answers
-#
-# We delete the child records first so PostgreSQL
-# foreign-key constraints are satisfied.
-#
-# =========================================================
 
 @router.delete(
     "/modules/{module_id}",
@@ -257,15 +392,15 @@ def complete_module_progress(
 def delete_module(
     module_id: int,
     db: Session = Depends(get_db),
-    current_admin: User = Depends(require_admin),
+    current_user: User = Depends(
+        require_instructor_or_admin
+    ),
 ):
-    # -----------------------------------------------------
-    # FIND MODULE
-    # -----------------------------------------------------
-
     module = (
         db.query(Module)
-        .filter(Module.id == module_id)
+        .filter(
+            Module.id == module_id
+        )
         .first()
     )
 
@@ -275,9 +410,15 @@ def delete_module(
             detail="Module not found",
         )
 
+    check_module_access(
+        module,
+        current_user,
+        db,
+    )
+
     try:
         # -------------------------------------------------
-        # 1. DELETE MODULE PROGRESS
+        # DELETE MODULE PROGRESS
         # -------------------------------------------------
 
         db.query(ModuleProgress).filter(
@@ -287,19 +428,21 @@ def delete_module(
         )
 
         # -------------------------------------------------
-        # 2. FIND QUIZ FOR THIS MODULE
+        # FIND QUIZ
         # -------------------------------------------------
 
         quiz = (
             db.query(Quiz)
-            .filter(Quiz.module_id == module_id)
+            .filter(
+                Quiz.module_id == module_id
+            )
             .first()
         )
 
         if quiz is not None:
 
             # ---------------------------------------------
-            # 3. DELETE QUIZ ATTEMPTS
+            # DELETE ATTEMPTS
             # ---------------------------------------------
 
             db.query(QuizAttempt).filter(
@@ -309,9 +452,7 @@ def delete_module(
             )
 
             # ---------------------------------------------
-            # 4. DELETE ANSWERS
-            #
-            # Answers reference Questions.
+            # DELETE ANSWERS
             # ---------------------------------------------
 
             db.execute(
@@ -331,7 +472,7 @@ def delete_module(
             )
 
             # ---------------------------------------------
-            # 5. DELETE QUESTIONS
+            # DELETE QUESTIONS
             # ---------------------------------------------
 
             db.query(Question).filter(
@@ -341,30 +482,21 @@ def delete_module(
             )
 
             # ---------------------------------------------
-            # 6. DELETE QUIZ
+            # DELETE QUIZ
             # ---------------------------------------------
 
             db.delete(quiz)
-
-            # Flush here so the quiz is actually removed
-            # before the module is deleted.
             db.flush()
 
         # -------------------------------------------------
-        # 7. DELETE MODULE
+        # DELETE MODULE
         # -------------------------------------------------
 
         db.delete(module)
 
-        # -------------------------------------------------
-        # 8. COMMIT EVERYTHING
-        # -------------------------------------------------
-
         db.commit()
 
     except Exception:
-        # Roll back the transaction if any dependency
-        # prevents deletion.
         db.rollback()
 
         raise HTTPException(

@@ -1,11 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from backend.app.auth.authorization import require_instructor_or_admin
+from backend.app.auth.authorization import (
+    require_instructor_or_admin,
+)
 from backend.app.database import get_db
+
+from backend.app.models.course_assignment import CourseAssignment
 from backend.app.models.module import Module
 from backend.app.models.training_content import TrainingContent
-from backend.app.models.user import User
+from backend.app.models.user import User, UserRole
+
 from backend.app.schemas.training_content import (
     TrainingContentCreate,
     TrainingContentUpdate,
@@ -20,6 +25,36 @@ router = APIRouter(
 
 
 # =========================================================
+# HELPER
+# =========================================================
+
+def check_module_access(
+    module: Module,
+    current_user: User,
+    db: Session,
+):
+    if current_user.role == UserRole.ADMIN:
+        return
+
+    assignment = (
+        db.query(CourseAssignment)
+        .filter(
+            CourseAssignment.course_id
+            == module.course_id,
+            CourseAssignment.user_id
+            == current_user.id,
+        )
+        .first()
+    )
+
+    if assignment is None:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have access to this module",
+        )
+
+
+# =========================================================
 # CREATE TRAINING CONTENT
 # =========================================================
 
@@ -31,11 +66,15 @@ def create_training_content(
     module_id: int,
     content_data: TrainingContentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_instructor_or_admin),
+    current_user: User = Depends(
+        require_instructor_or_admin
+    ),
 ):
     module = (
         db.query(Module)
-        .filter(Module.id == module_id)
+        .filter(
+            Module.id == module_id
+        )
         .first()
     )
 
@@ -45,9 +84,11 @@ def create_training_content(
             detail="Module not found",
         )
 
-    # -----------------------------------------------------
-    # VALIDATE CONTENT TYPE
-    # -----------------------------------------------------
+    check_module_access(
+        module,
+        current_user,
+        db,
+    )
 
     if content_data.content_type not in {
         "text",
@@ -58,19 +99,14 @@ def create_training_content(
             detail="Content type must be either 'text' or 'video'",
         )
 
-    # -----------------------------------------------------
-    # VALIDATE TITLE
-    # -----------------------------------------------------
-
-    if not content_data.title or not content_data.title.strip():
+    if (
+        not content_data.title
+        or not content_data.title.strip()
+    ):
         raise HTTPException(
             status_code=400,
             detail="Content title is required",
         )
-
-    # -----------------------------------------------------
-    # VALIDATE TEXT CONTENT
-    # -----------------------------------------------------
 
     if (
         content_data.content_type == "text"
@@ -81,10 +117,6 @@ def create_training_content(
             detail="Text content requires a body",
         )
 
-    # -----------------------------------------------------
-    # VALIDATE VIDEO CONTENT
-    # -----------------------------------------------------
-
     if (
         content_data.content_type == "video"
         and not content_data.video_url
@@ -93,10 +125,6 @@ def create_training_content(
             status_code=400,
             detail="Video content requires a video URL",
         )
-
-    # -----------------------------------------------------
-    # CREATE CONTENT
-    # -----------------------------------------------------
 
     content = TrainingContent(
         module_id=module_id,
@@ -120,7 +148,7 @@ def create_training_content(
 
 
 # =========================================================
-# GET ALL CONTENT FOR A MODULE
+# GET MODULE CONTENT
 # =========================================================
 
 @router.get(
@@ -133,7 +161,9 @@ def get_module_content(
 ):
     module = (
         db.query(Module)
-        .filter(Module.id == module_id)
+        .filter(
+            Module.id == module_id
+        )
         .first()
     )
 
@@ -157,7 +187,7 @@ def get_module_content(
 
 
 # =========================================================
-# GET SINGLE TRAINING CONTENT
+# GET SINGLE CONTENT
 # =========================================================
 
 @router.get(
@@ -197,7 +227,9 @@ def update_training_content(
     content_id: int,
     content_data: TrainingContentUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_instructor_or_admin),
+    current_user: User = Depends(
+        require_instructor_or_admin
+    ),
 ):
     content = (
         db.query(TrainingContent)
@@ -213,9 +245,25 @@ def update_training_content(
             detail="Training content not found",
         )
 
-    # -----------------------------------------------------
-    # VALIDATE CONTENT TYPE
-    # -----------------------------------------------------
+    module = (
+        db.query(Module)
+        .filter(
+            Module.id == content.module_id
+        )
+        .first()
+    )
+
+    if module is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Module not found",
+        )
+
+    check_module_access(
+        module,
+        current_user,
+        db,
+    )
 
     if content_data.content_type not in {
         "text",
@@ -226,19 +274,14 @@ def update_training_content(
             detail="Content type must be either 'text' or 'video'",
         )
 
-    # -----------------------------------------------------
-    # VALIDATE TITLE
-    # -----------------------------------------------------
-
-    if not content_data.title or not content_data.title.strip():
+    if (
+        not content_data.title
+        or not content_data.title.strip()
+    ):
         raise HTTPException(
             status_code=400,
             detail="Content title is required",
         )
-
-    # -----------------------------------------------------
-    # VALIDATE TEXT CONTENT
-    # -----------------------------------------------------
 
     if (
         content_data.content_type == "text"
@@ -249,10 +292,6 @@ def update_training_content(
             detail="Text content requires a body",
         )
 
-    # -----------------------------------------------------
-    # VALIDATE VIDEO CONTENT
-    # -----------------------------------------------------
-
     if (
         content_data.content_type == "video"
         and not content_data.video_url
@@ -261,10 +300,6 @@ def update_training_content(
             status_code=400,
             detail="Video content requires a video URL",
         )
-
-    # -----------------------------------------------------
-    # UPDATE CONTENT
-    # -----------------------------------------------------
 
     content.title = content_data.title.strip()
 
@@ -278,17 +313,9 @@ def update_training_content(
         content_data.content_type
     )
 
-    content.video_url = (
-        content_data.video_url
-    )
-
-    content.body = (
-        content_data.body
-    )
-
-    content.display_order = (
-        content_data.display_order
-    )
+    content.video_url = content_data.video_url
+    content.body = content_data.body
+    content.display_order = content_data.display_order
 
     db.commit()
     db.refresh(content)
@@ -306,7 +333,9 @@ def update_training_content(
 def delete_training_content(
     content_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_instructor_or_admin),
+    current_user: User = Depends(
+        require_instructor_or_admin
+    ),
 ):
     content = (
         db.query(TrainingContent)
@@ -321,6 +350,26 @@ def delete_training_content(
             status_code=404,
             detail="Training content not found",
         )
+
+    module = (
+        db.query(Module)
+        .filter(
+            Module.id == content.module_id
+        )
+        .first()
+    )
+
+    if module is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Module not found",
+        )
+
+    check_module_access(
+        module,
+        current_user,
+        db,
+    )
 
     module_id = content.module_id
 

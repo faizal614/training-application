@@ -26,6 +26,8 @@ import ManageQuiz from './pages/admin/ManageQuiz'
 import ManageLearners from './pages/admin/ManageLearners'
 import Progress from './pages/admin/Progress'
 import Certificates from './pages/admin/Certificates'
+import InstructorDashboard from './pages/instructor/InstructorDashboard'
+import ManageCourse from './pages/instructor/ManageCourse'
 
 import './App.css'
 
@@ -194,6 +196,14 @@ function App() {
 <Route
   path="/admin/certificates"
   element={<Certificates />}
+/>
+<Route
+  path="/instructor"
+  element={<InstructorDashboard />}
+/>
+<Route
+  path="/instructor/course/:courseId"
+  element={<ManageCourse />}
 />
 
 
