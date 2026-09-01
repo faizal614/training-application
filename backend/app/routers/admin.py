@@ -1,3 +1,6 @@
+from datetime import datetime, timezone
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from pwdlib import PasswordHash
@@ -5,10 +8,20 @@ from sqlalchemy.orm import Session
 
 from backend.app.auth.authorization import require_admin
 from backend.app.database import get_db
+
 from backend.app.models.user import User, UserRole
 from backend.app.models.course import Course
 from backend.app.models.course_assignment import CourseAssignment
 from backend.app.models.certificate import Certificate
+from backend.app.models.module import Module
+from backend.app.models.module_progress import ModuleProgress
+from backend.app.models.quiz import Quiz
+from backend.app.models.quiz_attempt import QuizAttempt
+
+from backend.app.services.notifications import (
+    send_course_assignment_notification,
+)
+
 
 router = APIRouter(
     prefix="/admin",
@@ -286,10 +299,6 @@ def update_instructor_access(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    # -----------------------------------------------------
-    # FIND INSTRUCTOR
-    # -----------------------------------------------------
-
     instructor = (
         db.query(User)
         .filter(
@@ -305,10 +314,6 @@ def update_instructor_access(
             detail="Instructor not found",
         )
 
-    # -----------------------------------------------------
-    # UPDATE ACCESS
-    # -----------------------------------------------------
-
     instructor.is_active = is_active
 
     db.commit()
@@ -321,12 +326,23 @@ def update_instructor_access(
         "role": instructor.role,
         "is_active": instructor.is_active,
     }
+
+
 # =========================================================
 # LEARNER COURSE ASSIGNMENT REQUEST
 # =========================================================
 
 class LearnerCourseAssignment(BaseModel):
     learner_id: int
+    deadline: Optional[datetime] = None
+
+
+# =========================================================
+# UPDATE COURSE ASSIGNMENT DEADLINE REQUEST
+# =========================================================
+
+class CourseAssignmentDeadlineUpdate(BaseModel):
+    deadline: Optional[datetime] = None
 
 
 # =========================================================
@@ -423,17 +439,80 @@ def assign_course_to_learner(
         )
 
     # -----------------------------------------------------
+    # NORMALIZE DEADLINE
+    # -----------------------------------------------------
+
+    deadline = None
+
+    if assignment_data.deadline is not None:
+        deadline = assignment_data.deadline
+
+        # -------------------------------------------------
+        # Convert timezone-aware datetime to UTC.
+        #
+        # The frontend sends an ISO datetime such as:
+        #
+        # 2026-09-30T12:59:00.000Z
+        #
+        # The database uses a naive DateTime column.
+        # Therefore store UTC without timezone information.
+        # -------------------------------------------------
+
+        if deadline.tzinfo is not None:
+            deadline = deadline.astimezone(
+                timezone.utc
+            ).replace(tzinfo=None)
+
+        # -------------------------------------------------
+        # DEADLINE MUST BE IN THE FUTURE
+        # -------------------------------------------------
+
+        if deadline <= datetime.utcnow():
+            raise HTTPException(
+                status_code=400,
+                detail="Deadline must be in the future",
+            )
+
+    # -----------------------------------------------------
     # CREATE ASSIGNMENT
     # -----------------------------------------------------
 
     assignment = CourseAssignment(
         user_id=learner.id,
         course_id=course.id,
+        deadline=deadline,
+        deadline_reminder_sent_at=None,
     )
 
     db.add(assignment)
+
+    # -----------------------------------------------------
+    # SAVE ASSIGNMENT
+    # -----------------------------------------------------
+
     db.commit()
     db.refresh(assignment)
+
+    # -----------------------------------------------------
+    # SEND EMAIL NOTIFICATION
+    # -----------------------------------------------------
+
+    try:
+        send_course_assignment_notification(
+            user_name=learner.name,
+            user_email=learner.email,
+            course_title=course.title,
+            deadline=assignment.deadline,
+        )
+
+    except Exception as email_error:
+        print(
+            f"Course assignment email failed: {email_error}"
+        )
+
+    # -----------------------------------------------------
+    # RESPONSE
+    # -----------------------------------------------------
 
     return {
         "message": "Course assigned to learner successfully",
@@ -442,6 +521,7 @@ def assign_course_to_learner(
         "learner_name": learner.name,
         "course_id": course.id,
         "course_title": course.title,
+        "deadline": assignment.deadline,
     }
 
 
@@ -484,10 +564,192 @@ def get_learner_courses(
             "course_title": assignment.course.title,
             "course_description": assignment.course.description,
             "assigned_at": assignment.assigned_at,
+            "deadline": assignment.deadline,
         }
         for assignment in assignments
     ]
 
+
+# =========================================================
+# UPDATE COURSE ASSIGNMENT DEADLINE
+# =========================================================
+#
+# This endpoint is used by ManageLearners.jsx.
+#
+# Frontend request:
+#
+# PATCH
+# /admin/course-assignments/{assignment_id}/deadline
+#
+# Body:
+#
+# {
+#     "deadline": "2026-09-30T12:59:00.000Z"
+# }
+#
+# To remove the deadline:
+#
+# {
+#     "deadline": null
+# }
+#
+# =========================================================
+
+# =========================================================
+# UPDATE COURSE ASSIGNMENT DEADLINE
+# =========================================================
+
+@router.patch(
+    "/course-assignments/{assignment_id}/deadline"
+)
+def update_course_assignment_deadline(
+    assignment_id: int,
+    deadline_data: dict,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+):
+    # -----------------------------------------------------
+    # FIND ASSIGNMENT
+    # -----------------------------------------------------
+
+    assignment = (
+        db.query(CourseAssignment)
+        .filter(
+            CourseAssignment.id == assignment_id
+        )
+        .first()
+    )
+
+    if assignment is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Course assignment not found",
+        )
+
+    # -----------------------------------------------------
+    # GET DEADLINE
+    # -----------------------------------------------------
+
+    deadline = deadline_data.get(
+        "deadline"
+    )
+
+    # =====================================================
+    # SET / UPDATE DEADLINE
+    # =====================================================
+
+    if deadline is not None:
+
+        try:
+
+            parsed_deadline = (
+                datetime.fromisoformat(
+                    deadline.replace(
+                        "Z",
+                        "+00:00"
+                    )
+                )
+            )
+
+        except ValueError:
+
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid deadline format",
+            )
+
+        # -------------------------------------------------
+        # MAKE COMPARISON TIMEZONE-SAFE
+        # -------------------------------------------------
+
+        if parsed_deadline.tzinfo is not None:
+
+            now = datetime.now(
+                parsed_deadline.tzinfo
+            )
+
+        else:
+
+            now = datetime.now()
+
+        # -------------------------------------------------
+        # DEADLINE MUST BE IN FUTURE
+        # -------------------------------------------------
+
+        if parsed_deadline <= now:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The deadline must be in the future."
+                ),
+            )
+
+        # -------------------------------------------------
+        # SAVE NEW DEADLINE
+        # -------------------------------------------------
+
+        assignment.deadline = parsed_deadline
+
+        # -------------------------------------------------
+        # RESET REMINDER
+        # -------------------------------------------------
+        #
+        # This is important.
+        #
+        # Example:
+        #
+        # Old deadline:
+        # 5:00 PM
+        #
+        # Reminder already sent:
+        # deadline_reminder_sent_at != NULL
+        #
+        # Admin changes deadline:
+        # 8:00 PM
+        #
+        # We must allow a new reminder to be sent.
+        #
+        # -------------------------------------------------
+
+        assignment.deadline_reminder_sent_at = None
+
+    else:
+
+        # =================================================
+        # REMOVE DEADLINE
+        # =================================================
+
+        assignment.deadline = None
+
+        # -------------------------------------------------
+        # There is no reminder to send anymore.
+        # -------------------------------------------------
+
+        assignment.deadline_reminder_sent_at = None
+
+    # =====================================================
+    # SAVE
+    # =====================================================
+
+    db.commit()
+    db.refresh(assignment)
+
+    # =====================================================
+    # RESPONSE
+    # =====================================================
+
+    return {
+        "assignment_id": assignment.id,
+        "deadline": assignment.deadline,
+        "deadline_reminder_sent_at": (
+            assignment.deadline_reminder_sent_at
+        ),
+        "message": (
+            "Course assignment deadline "
+            "updated successfully"
+        ),
+    }
 
 # =========================================================
 # UPDATE LEARNER ACCESS
@@ -528,8 +790,27 @@ def update_learner_access(
         "is_active": learner.is_active,
     }
 
+
 # =========================================================
 # DELETE LEARNER
+# =========================================================
+#
+# A learner can have records in multiple tables.
+#
+# Deletion order:
+#
+# Certificate
+#      ↓
+# Quiz Attempts
+#      ↓
+# Module Progress
+#      ↓
+# Course Assignments
+#      ↓
+# User
+#
+# This prevents foreign-key constraint errors.
+#
 # =========================================================
 
 @router.delete("/learners/{learner_id}")
@@ -538,6 +819,10 @@ def delete_learner(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    # -----------------------------------------------------
+    # FIND LEARNER
+    # -----------------------------------------------------
+
     learner = (
         db.query(User)
         .filter(
@@ -553,20 +838,86 @@ def delete_learner(
             detail="Learner not found",
         )
 
-    db.delete(learner)
-    db.commit()
+    try:
+
+        # =================================================
+        # 1. DELETE CERTIFICATES
+        # =================================================
+
+        db.query(Certificate).filter(
+            Certificate.user_id == learner_id
+        ).delete(
+            synchronize_session=False
+        )
+
+        # =================================================
+        # 2. DELETE QUIZ ATTEMPTS
+        # =================================================
+
+        db.query(QuizAttempt).filter(
+            QuizAttempt.user_id == learner_id
+        ).delete(
+            synchronize_session=False
+        )
+
+        # =================================================
+        # 3. DELETE MODULE PROGRESS
+        # =================================================
+
+        db.query(ModuleProgress).filter(
+            ModuleProgress.user_id == learner_id
+        ).delete(
+            synchronize_session=False
+        )
+
+        # =================================================
+        # 4. DELETE COURSE ASSIGNMENTS
+        # =================================================
+
+        db.query(CourseAssignment).filter(
+            CourseAssignment.user_id == learner_id
+        ).delete(
+            synchronize_session=False
+        )
+
+        # =================================================
+        # 5. DELETE LEARNER
+        # =================================================
+
+        db.delete(learner)
+
+        # =================================================
+        # 6. COMMIT
+        # =================================================
+
+        db.commit()
+
+    except Exception as error:
+
+        # -------------------------------------------------
+        # ROLLBACK
+        # -------------------------------------------------
+
+        db.rollback()
+
+        print(
+            f"Failed to delete learner {learner_id}: {error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to delete learner and related data",
+        )
 
     return {
-        "message": "Learner deleted successfully"
+        "message": "Learner deleted successfully",
+        "learner_id": learner_id,
     }
-    # =========================================================
+
+
+# =========================================================
 # ADMIN PROGRESS
 # =========================================================
-
-from backend.app.models.module import Module
-from backend.app.models.module_progress import ModuleProgress
-from backend.app.models.quiz import Quiz
-from backend.app.models.quiz_attempt import QuizAttempt
 
 
 # =========================================================
@@ -712,6 +1063,7 @@ def get_learner_progress(
                     )
 
                     for attempt in attempts:
+
                         quiz_results.append(
                             {
                                 "attempt_id": attempt.id,
@@ -764,14 +1116,28 @@ def get_learner_progress(
                     "course_id": course.id,
                     "course_title": course.title,
                     "course_description": course.description,
+
+                    # -------------------------------------
+                    # COURSE ASSIGNMENT
+                    # -------------------------------------
+
+                    "assigned_at": assignment.assigned_at,
+                    "deadline": assignment.deadline,
+
+                    # -------------------------------------
+                    # PROGRESS
+                    # -------------------------------------
+
                     "completed_modules": completed_modules,
                     "total_modules": total_modules,
                     "progress_percentage": progress_percentage,
+
                     "completed": (
                         total_modules > 0
                         and completed_modules
                         == total_modules
                     ),
+
                     "modules": module_results,
                 }
             )
@@ -791,6 +1157,7 @@ def get_learner_progress(
         )
 
     return result
+
 
 # =========================================================
 # GET ALL CERTIFICATES

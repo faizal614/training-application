@@ -615,15 +615,12 @@ h1 {
 
 .quiz-section {
   padding: 48px 0;
-
   border-top: 1px solid #111111;
 }
 
 .quiz-section h2 {
   margin: 0 0 32px;
-
   font-family: Georgia, "Times New Roman", serif;
-
   font-size: 32px;
   font-weight: 400;
 }
@@ -634,19 +631,15 @@ h1 {
 
 .quiz-question {
   margin: 0 0 36px;
-
   padding: 0 0 28px;
-
   border: 0;
   border-bottom: 1px solid #d9d9d9;
 }
 
 .quiz-question legend {
   width: 100%;
-
   margin-bottom: 20px;
   padding: 0;
-
   font-size: 18px;
   font-weight: 700;
 }
@@ -654,11 +647,8 @@ h1 {
 .quiz-answer {
   display: flex;
   align-items: center;
-
   gap: 12px;
-
   padding: 12px 0;
-
   cursor: pointer;
 }
 

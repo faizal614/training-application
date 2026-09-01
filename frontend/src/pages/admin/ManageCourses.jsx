@@ -463,109 +463,105 @@ function ManageCourses() {
 
       </section>
 
-      {/* =====================================================
-          COURSE LIST
-      ===================================================== */}
+{/* =====================================================
+    COURSE LIST
+===================================================== */}
 
-      <section className="course-placeholder">
+<section className="course-placeholder">
 
-        <p className="eyebrow">
-          EXISTING COURSES
-        </p>
+  <p className="eyebrow">
+    EXISTING COURSES
+  </p>
 
-        {courses.length === 0 ? (
-          <p>
-            No courses have been created yet.
+  {courses.length === 0 ? (
+    <p>
+      No courses have been created yet.
+    </p>
+  ) : (
+    <div className="course-list">
+
+      {courses.map((course, index) => (
+        <article
+          key={course.id}
+          className="course-card"
+        >
+
+          <p className="eyebrow">
+            COURSE #{index + 1}
           </p>
-        ) : (
-          <div className="course-list">
 
-            {courses.map((course) => (
-              <article
-                key={course.id}
-                className="course-card"
-              >
+          <h3>
+            {course.title}
+          </h3>
 
-                <p className="eyebrow">
-                  COURSE #{course.id}
-                </p>
+          {/* CATEGORY */}
 
-                <h3>
-                  {course.title}
-                </h3>
+          <p
+            style={{
+              margin: '0 0 16px',
+              fontSize: '12px',
+              fontWeight: '700',
+              letterSpacing: '1px',
+              textTransform: 'uppercase',
+              color: '#555',
+            }}
+          >
+            Category:{' '}
+            {course.category || 'General'}
+          </p>
 
-                {/* CATEGORY */}
+          <p>
+            {course.description ||
+              'No description provided.'}
+          </p>
 
-                <p
-                  style={{
-                    margin:
-                      '0 0 16px',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    letterSpacing: '1px',
-                    textTransform:
-                      'uppercase',
-                    color: '#555',
-                  }}
-                >
-                  Category:{' '}
-                  {course.category ||
-                    'General'}
-                </p>
+          <div
+            style={{
+              display: 'flex',
+              gap: '10px',
+              flexWrap: 'wrap',
+              marginTop: '16px',
+            }}
+          >
 
-                <p>
-                  {course.description ||
-                    'No description provided.'}
-                </p>
+            {/* EDIT */}
 
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '10px',
-                    flexWrap: 'wrap',
-                    marginTop: '16px',
-                  }}
-                >
+            <button
+              type="button"
+              className="auth-button"
+              onClick={() =>
+                handleEdit(course)
+              }
+            >
+              Edit
+            </button>
 
-                  {/* EDIT */}
+            {/* DELETE */}
 
-                  <button
-                    type="button"
-                    className="auth-button"
-                    onClick={() =>
-                      handleEdit(course)
-                    }
-                  >
-                    Edit
-                  </button>
-
-                  {/* DELETE */}
-
-                  <button
-                    type="button"
-                    className="auth-button"
-                    onClick={() =>
-                      handleDelete(course)
-                    }
-                    disabled={
-                      deletingId === course.id
-                    }
-                  >
-                    {deletingId === course.id
-                      ? 'Deleting...'
-                      : 'Delete'}
-                  </button>
-
-                </div>
-
-              </article>
-            ))}
+            <button
+              type="button"
+              className="auth-button"
+              onClick={() =>
+                handleDelete(course)
+              }
+              disabled={
+                deletingId === course.id
+              }
+            >
+              {deletingId === course.id
+                ? 'Deleting...'
+                : 'Delete'}
+            </button>
 
           </div>
-        )}
 
-      </section>
+        </article>
+      ))}
 
+    </div>
+  )}
+
+</section>
       {/* =====================================================
           BACK
       ===================================================== */}

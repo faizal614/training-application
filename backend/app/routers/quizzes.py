@@ -2,6 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.app.auth.authorization import (
@@ -40,6 +41,10 @@ from backend.app.schemas.quiz_attempt import (
     QuizSubmission,
 )
 
+from backend.app.services.notifications import (
+    send_quiz_result_notification,
+)
+
 
 router = APIRouter(
     prefix="/modules",
@@ -51,10 +56,12 @@ router = APIRouter(
 # UPDATE SCHEMAS
 # =========================================================
 
+
 class QuizUpdate(BaseModel):
     title: str
     passing_score: int
     max_attempts: int
+    randomize_questions: bool = False
 
 
 class QuestionUpdate(BaseModel):
@@ -71,6 +78,7 @@ class AnswerUpdate(BaseModel):
 # =========================================================
 # ACCESS HELPER
 # =========================================================
+
 
 def check_module_access(
     module: Module,
@@ -101,6 +109,7 @@ def check_module_access(
 # =========================================================
 # CREATE QUIZ
 # =========================================================
+
 
 @router.post(
     "/{module_id}/quiz",
@@ -165,6 +174,7 @@ def create_quiz(
         title=quiz_data.title,
         passing_score=quiz_data.passing_score,
         max_attempts=quiz_data.max_attempts,
+        randomize_questions=quiz_data.randomize_questions,
     )
 
     db.add(quiz)
@@ -177,6 +187,7 @@ def create_quiz(
 # =========================================================
 # GET MODULE QUIZ
 # =========================================================
+
 
 @router.get(
     "/{module_id}/quiz",
@@ -220,6 +231,7 @@ def get_module_quiz(
 # =========================================================
 # UPDATE QUIZ
 # =========================================================
+
 
 @router.put(
     "/quiz/{quiz_id}",
@@ -288,6 +300,9 @@ def update_quiz(
     quiz.title = quiz_data.title.strip()
     quiz.passing_score = quiz_data.passing_score
     quiz.max_attempts = quiz_data.max_attempts
+    quiz.randomize_questions = (
+        quiz_data.randomize_questions
+    )
 
     db.commit()
     db.refresh(quiz)
@@ -298,6 +313,7 @@ def update_quiz(
 # =========================================================
 # DELETE QUIZ
 # =========================================================
+
 
 @router.delete(
     "/quiz/{quiz_id}",
@@ -399,6 +415,7 @@ def delete_quiz(
 # CREATE QUESTION
 # =========================================================
 
+
 @router.post(
     "/quizzes/{quiz_id}/questions",
     response_model=QuestionResponse,
@@ -456,6 +473,7 @@ def create_question(
 # GET QUIZ QUESTIONS
 # =========================================================
 
+
 @router.get(
     "/quizzes/{quiz_id}/questions",
 )
@@ -477,16 +495,33 @@ def get_quiz_questions(
             detail="Quiz not found",
         )
 
-    questions = (
-        db.query(Question)
-        .filter(
-            Question.quiz_id == quiz_id
+    # -----------------------------------------------------
+    # RANDOMIZE QUESTIONS WHEN ENABLED
+    # -----------------------------------------------------
+
+    if quiz.randomize_questions:
+        questions = (
+            db.query(Question)
+            .filter(
+                Question.quiz_id == quiz_id
+            )
+            .order_by(
+                func.random()
+            )
+            .all()
         )
-        .order_by(
-            Question.display_order
+
+    else:
+        questions = (
+            db.query(Question)
+            .filter(
+                Question.quiz_id == quiz_id
+            )
+            .order_by(
+                Question.display_order
+            )
+            .all()
         )
-        .all()
-    )
 
     result = []
 
@@ -530,6 +565,7 @@ def get_quiz_questions(
 # =========================================================
 # UPDATE QUESTION
 # =========================================================
+
 
 @router.put(
     "/questions/{question_id}",
@@ -603,6 +639,7 @@ def update_question(
 # DELETE QUESTION
 # =========================================================
 
+
 @router.delete(
     "/questions/{question_id}",
 )
@@ -635,6 +672,12 @@ def delete_question(
         .first()
     )
 
+    if quiz is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quiz not found",
+        )
+
     module = (
         db.query(Module)
         .filter(
@@ -642,6 +685,12 @@ def delete_question(
         )
         .first()
     )
+
+    if module is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Module not found",
+        )
 
     check_module_access(
         module,
@@ -667,6 +716,7 @@ def delete_question(
 # =========================================================
 # CREATE ANSWER
 # =========================================================
+
 
 @router.post(
     "/questions/{question_id}/answers",
@@ -702,6 +752,12 @@ def create_answer(
         .first()
     )
 
+    if quiz is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quiz not found",
+        )
+
     module = (
         db.query(Module)
         .filter(
@@ -709,6 +765,12 @@ def create_answer(
         )
         .first()
     )
+
+    if module is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Module not found",
+        )
 
     check_module_access(
         module,
@@ -733,6 +795,7 @@ def create_answer(
 # =========================================================
 # UPDATE ANSWER
 # =========================================================
+
 
 @router.put(
     "/answers/{answer_id}",
@@ -768,6 +831,12 @@ def update_answer(
         .first()
     )
 
+    if question is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Question not found",
+        )
+
     quiz = (
         db.query(Quiz)
         .filter(
@@ -776,6 +845,12 @@ def update_answer(
         .first()
     )
 
+    if quiz is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quiz not found",
+        )
+
     module = (
         db.query(Module)
         .filter(
@@ -783,6 +858,12 @@ def update_answer(
         )
         .first()
     )
+
+    if module is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Module not found",
+        )
 
     check_module_access(
         module,
@@ -811,6 +892,7 @@ def update_answer(
 # =========================================================
 # DELETE ANSWER
 # =========================================================
+
 
 @router.delete(
     "/answers/{answer_id}",
@@ -844,6 +926,12 @@ def delete_answer(
         .first()
     )
 
+    if question is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Question not found",
+        )
+
     quiz = (
         db.query(Quiz)
         .filter(
@@ -852,6 +940,12 @@ def delete_answer(
         .first()
     )
 
+    if quiz is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Quiz not found",
+        )
+
     module = (
         db.query(Module)
         .filter(
@@ -859,6 +953,12 @@ def delete_answer(
         )
         .first()
     )
+
+    if module is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Module not found",
+        )
 
     check_module_access(
         module,
@@ -878,6 +978,7 @@ def delete_answer(
 # =========================================================
 # RESET QUIZ ATTEMPTS
 # =========================================================
+
 
 @router.post(
     "/{module_id}/quiz/reset",
@@ -960,6 +1061,7 @@ def reset_quiz_attempts(
 # =========================================================
 # SUBMIT QUIZ
 # =========================================================
+
 
 @router.post(
     "/quizzes/{quiz_id}/submit",
@@ -1163,7 +1265,37 @@ def submit_quiz(
         == total_modules
     )
 
+    # -----------------------------------------------------
+    # SAVE QUIZ ATTEMPT AND PROGRESS
+    # -----------------------------------------------------
+
     db.commit()
+
+    # -----------------------------------------------------
+    # SEND QUIZ RESULT EMAIL
+    #
+    # Email failure must not make the quiz submission fail.
+    # The quiz attempt has already been committed above.
+    # -----------------------------------------------------
+
+    try:
+        send_quiz_result_notification(
+            user_name=current_user.name,
+            user_email=current_user.email,
+            quiz_title=quiz.title,
+            score=score,
+            passing_score=quiz.passing_score,
+            passed=passed,
+        )
+
+    except Exception as email_error:
+        print(
+            f"Quiz result email failed: {email_error}"
+        )
+
+    # -----------------------------------------------------
+    # RETURN QUIZ RESULT
+    # -----------------------------------------------------
 
     return QuizResultResponse(
         score=score,

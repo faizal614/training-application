@@ -14,6 +14,9 @@ from backend.app.schemas.auth import (
     SignUpRequest,
 )
 from backend.app.auth.dependencies import get_current_user
+from backend.app.services.notifications import (
+    send_account_created_notification,
+)
 
 
 router = APIRouter(
@@ -60,6 +63,15 @@ def signup(
     db.commit()
     db.refresh(user)
 
+    # -----------------------------------------------------
+    # SEND ACCOUNT CREATED EMAIL
+    # -----------------------------------------------------
+
+    send_account_created_notification(
+        user_name=user.name,
+        user_email=user.email,
+    )
+
     access_token = create_access_token(user.id)
 
     return AuthResponse(
@@ -67,7 +79,6 @@ def signup(
         token_type="bearer",
         user_id=user.id,
     )
-
 
 # =========================================================
 # SIGN IN

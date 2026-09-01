@@ -81,6 +81,159 @@ function Progress() {
   }
 
   // ---------------------------------------------------------
+  // FORMAT DEADLINE
+  // ---------------------------------------------------------
+
+  const formatDeadline = (date) => {
+    if (!date) {
+      return 'No deadline'
+    }
+
+    const parsedDate = new Date(date)
+
+    if (
+      Number.isNaN(
+        parsedDate.getTime()
+      )
+    ) {
+      return date
+    }
+
+    return parsedDate.toLocaleString(
+      undefined,
+      {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }
+    )
+  }
+
+  // ---------------------------------------------------------
+  // GET DEADLINE STATUS
+  // ---------------------------------------------------------
+
+  const getDeadlineStatus = (date) => {
+    if (!date) {
+      return {
+        label: 'No deadline',
+        type: 'none',
+      }
+    }
+
+    const deadlineDate = new Date(date)
+
+    if (
+      Number.isNaN(
+        deadlineDate.getTime()
+      )
+    ) {
+      return {
+        label: 'Invalid deadline',
+        type: 'none',
+      }
+    }
+
+    const now = new Date()
+
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    )
+
+    const tomorrowStart = new Date(
+      todayStart
+    )
+
+    tomorrowStart.setDate(
+      tomorrowStart.getDate() + 1
+    )
+
+    // -------------------------------------------------------
+    // OVERDUE
+    // -------------------------------------------------------
+
+    if (
+      deadlineDate.getTime() <
+      now.getTime()
+    ) {
+      return {
+        label: 'Overdue',
+        type: 'overdue',
+      }
+    }
+
+    // -------------------------------------------------------
+    // DUE TODAY
+    // -------------------------------------------------------
+
+    if (
+      deadlineDate.getTime() <
+      tomorrowStart.getTime()
+    ) {
+      return {
+        label: 'Due today',
+        type: 'today',
+      }
+    }
+
+    // -------------------------------------------------------
+    // UPCOMING
+    // -------------------------------------------------------
+
+    const difference =
+      deadlineDate.getTime() -
+      todayStart.getTime()
+
+    const days = Math.ceil(
+      difference /
+        (1000 * 60 * 60 * 24)
+    )
+
+    return {
+      label:
+        days === 1
+          ? 'Due tomorrow'
+          : `Due in ${days} days`,
+      type: 'upcoming',
+    }
+  }
+
+  // ---------------------------------------------------------
+  // DEADLINE STATUS STYLE
+  // ---------------------------------------------------------
+
+  const getDeadlineStatusStyle = (
+    type
+  ) => {
+    if (type === 'overdue') {
+      return {
+        color: '#b00000',
+        fontWeight: '700',
+      }
+    }
+
+    if (type === 'today') {
+      return {
+        color: '#8a5200',
+        fontWeight: '700',
+      }
+    }
+
+    if (type === 'upcoming') {
+      return {
+        color: '#111',
+        fontWeight: '600',
+      }
+    }
+
+    return {
+      color: '#777',
+      fontWeight: '400',
+    }
+  }
+
+  // ---------------------------------------------------------
   // GET LATEST ATTEMPT
   // ---------------------------------------------------------
 
@@ -415,33 +568,261 @@ function Progress() {
                         --------------------------------- */}
 
                         {learner.courses.map(
-                          (course) => (
-                            <div
-                              key={
-                                course.course_id
-                              }
-                              style={{
-                                border:
-                                  '1px solid #222',
-                                padding: '25px',
-                                marginBottom:
-                                  '20px',
-                              }}
-                            >
-                              {/* COURSE HEADER */}
+                          (course) => {
+                            const deadlineStatus =
+                              getDeadlineStatus(
+                                course.deadline
+                              )
 
+                            return (
                               <div
+                                key={
+                                  course.course_id
+                                }
                                 style={{
-                                  display: 'flex',
-                                  justifyContent:
-                                    'space-between',
-                                  alignItems:
-                                    'flex-start',
-                                  gap: '20px',
+                                  border:
+                                    '1px solid #222',
+                                  padding: '25px',
                                   marginBottom:
                                     '20px',
                                 }}
                               >
+                                {/* COURSE HEADER */}
+
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent:
+                                      'space-between',
+                                    alignItems:
+                                      'flex-start',
+                                    gap: '20px',
+                                    marginBottom:
+                                      '20px',
+                                  }}
+                                >
+                                  <div>
+                                    <div
+                                      style={{
+                                        fontSize:
+                                          '11px',
+                                        letterSpacing:
+                                          '3px',
+                                        marginBottom:
+                                          '8px',
+                                      }}
+                                    >
+                                      COURSE
+                                    </div>
+
+                                    <h3
+                                      style={{
+                                        fontFamily:
+                                          'Georgia, serif',
+                                        fontSize:
+                                          '28px',
+                                        fontWeight:
+                                          '400',
+                                        margin:
+                                          '0 0 8px',
+                                      }}
+                                    >
+                                      {
+                                        course.course_title
+                                      }
+                                    </h3>
+
+                                    {course.course_description && (
+                                      <p
+                                        style={{
+                                          color:
+                                            '#555',
+                                          margin:
+                                            0,
+                                        }}
+                                      >
+                                        {
+                                          course.course_description
+                                        }
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      textAlign:
+                                        'right',
+                                      flexShrink:
+                                        0,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize:
+                                          '28px',
+                                        fontWeight:
+                                          '600',
+                                      }}
+                                    >
+                                      {Math.round(
+                                        course.progress_percentage
+                                      )}
+                                      %
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        fontSize:
+                                          '13px',
+                                        color:
+                                          '#555',
+                                      }}
+                                    >
+                                      {
+                                        course.completed_modules
+                                      }{' '}
+                                      /{' '}
+                                      {
+                                        course.total_modules
+                                      }{' '}
+                                      modules
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* ---------------------------------
+                                    DEADLINE
+                                --------------------------------- */}
+
+                                <div
+                                  style={{
+                                    border:
+                                      '1px solid #ddd',
+                                    padding:
+                                      '14px 16px',
+                                    marginBottom:
+                                      '20px',
+                                    background:
+                                      '#fafafa',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display:
+                                        'flex',
+                                      justifyContent:
+                                        'space-between',
+                                      alignItems:
+                                        'center',
+                                      gap: '15px',
+                                      flexWrap:
+                                        'wrap',
+                                    }}
+                                  >
+                                    <div>
+                                      <div
+                                        style={{
+                                          fontSize:
+                                            '11px',
+                                          letterSpacing:
+                                            '2px',
+                                          color:
+                                            '#666',
+                                          marginBottom:
+                                            '5px',
+                                        }}
+                                      >
+                                        DEADLINE
+                                      </div>
+
+                                      <strong
+                                        style={{
+                                          fontSize:
+                                            '15px',
+                                        }}
+                                      >
+                                        {formatDeadline(
+                                          course.deadline
+                                        )}
+                                      </strong>
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        fontSize:
+                                          '14px',
+                                        ...getDeadlineStatusStyle(
+                                          deadlineStatus.type
+                                        ),
+                                      }}
+                                    >
+                                      {
+                                        deadlineStatus.label
+                                      }
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* ---------------------------------
+                                    PROGRESS BAR
+                                --------------------------------- */}
+
+                                <div
+                                  style={{
+                                    height: '8px',
+                                    background:
+                                      '#e5e5e5',
+                                    marginBottom:
+                                      '20px',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      height:
+                                        '100%',
+                                      width: `${Math.min(
+                                        Math.max(
+                                          course.progress_percentage,
+                                          0
+                                        ),
+                                        100
+                                      )}%`,
+                                      background:
+                                        '#111',
+                                    }}
+                                  />
+                                </div>
+
+                                {/* ---------------------------------
+                                    COURSE STATUS
+                                --------------------------------- */}
+
+                                <div
+                                  style={{
+                                    marginBottom:
+                                      '25px',
+                                    padding:
+                                      '13px 15px',
+                                    border:
+                                      '1px solid #ddd',
+                                    background:
+                                      course.completed
+                                        ? '#f3f3f3'
+                                        : '#fff',
+                                  }}
+                                >
+                                  <strong>
+                                    Course Status:
+                                  </strong>{' '}
+                                  {course.completed
+                                    ? 'COMPLETED'
+                                    : 'IN PROGRESS'}
+                                </div>
+
+                                {/* ---------------------------------
+                                    MODULE PROGRESS
+                                --------------------------------- */}
+
                                 <div>
                                   <div
                                     style={{
@@ -450,495 +831,346 @@ function Progress() {
                                       letterSpacing:
                                         '3px',
                                       marginBottom:
-                                        '8px',
+                                        '15px',
                                     }}
                                   >
-                                    COURSE
+                                    MODULE PROGRESS
                                   </div>
 
-                                  <h3
-                                    style={{
-                                      fontFamily:
-                                        'Georgia, serif',
-                                      fontSize:
-                                        '28px',
-                                      fontWeight:
-                                        '400',
-                                      margin:
-                                        '0 0 8px',
-                                    }}
-                                  >
-                                    {
-                                      course.course_title
-                                    }
-                                  </h3>
+                                  {course.modules.map(
+                                    (module) => {
+                                      const attempts =
+                                        module.quiz
+                                          ?.attempts ||
+                                        []
 
-                                  {course.course_description && (
-                                    <p
-                                      style={{
-                                        color:
-                                          '#555',
-                                        margin:
-                                          0,
-                                      }}
-                                    >
-                                      {
-                                        course.course_description
-                                      }
-                                    </p>
-                                  )}
-                                </div>
+                                      const latestAttempt =
+                                        getLatestAttempt(
+                                          attempts
+                                        )
 
-                                <div
-                                  style={{
-                                    textAlign:
-                                      'right',
-                                    flexShrink:
-                                      0,
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      fontSize:
-                                        '28px',
-                                      fontWeight:
-                                        '600',
-                                    }}
-                                  >
-                                    {Math.round(
-                                      course.progress_percentage
-                                    )}
-                                    %
-                                  </div>
-
-                                  <div
-                                    style={{
-                                      fontSize:
-                                        '13px',
-                                      color:
-                                        '#555',
-                                    }}
-                                  >
-                                    {
-                                      course.completed_modules
-                                    }{' '}
-                                    /{' '}
-                                    {
-                                      course.total_modules
-                                    }{' '}
-                                    modules
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* ---------------------------------
-                                  PROGRESS BAR
-                              --------------------------------- */}
-
-                              <div
-                                style={{
-                                  height: '8px',
-                                  background:
-                                    '#e5e5e5',
-                                  marginBottom:
-                                    '20px',
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    height:
-                                      '100%',
-                                    width: `${Math.min(
-                                      Math.max(
-                                        course.progress_percentage,
-                                        0
-                                      ),
-                                      100
-                                    )}%`,
-                                    background:
-                                      '#111',
-                                  }}
-                                />
-                              </div>
-
-                              {/* ---------------------------------
-                                  COURSE STATUS
-                              --------------------------------- */}
-
-                              <div
-                                style={{
-                                  marginBottom:
-                                    '25px',
-                                  padding: '13px 15px',
-                                  border:
-                                    '1px solid #ddd',
-                                  background:
-                                    course.completed
-                                      ? '#f3f3f3'
-                                      : '#fff',
-                                }}
-                              >
-                                <strong>
-                                  Course Status:
-                                </strong>{' '}
-                                {course.completed
-                                  ? 'COMPLETED'
-                                  : 'IN PROGRESS'}
-                              </div>
-
-                              {/* ---------------------------------
-                                  MODULE PROGRESS
-                              --------------------------------- */}
-
-                              <div>
-                                <div
-                                  style={{
-                                    fontSize:
-                                      '11px',
-                                    letterSpacing:
-                                      '3px',
-                                    marginBottom:
-                                      '15px',
-                                  }}
-                                >
-                                  MODULE PROGRESS
-                                </div>
-
-                                {course.modules.map(
-                                  (module) => {
-                                    const attempts =
-                                      module.quiz
-                                        ?.attempts ||
-                                      []
-
-                                    const latestAttempt =
-                                      getLatestAttempt(
-                                        attempts
-                                      )
-
-                                    return (
-                                      <div
-                                        key={
-                                          module.module_id
-                                        }
-                                        style={{
-                                          border:
-                                            '1px solid #ddd',
-                                          marginBottom:
-                                            '12px',
-                                          padding:
-                                            '18px',
-                                        }}
-                                      >
-                                        {/* MODULE HEADER */}
-
+                                      return (
                                         <div
+                                          key={
+                                            module.module_id
+                                          }
                                           style={{
-                                            display:
-                                              'flex',
-                                            justifyContent:
-                                              'space-between',
-                                            alignItems:
-                                              'center',
-                                            gap: '15px',
+                                            border:
+                                              '1px solid #ddd',
+                                            marginBottom:
+                                              '12px',
+                                            padding:
+                                              '18px',
                                           }}
                                         >
-                                          <div>
-                                            <div
-                                              style={{
-                                                fontSize:
-                                                  '11px',
-                                                letterSpacing:
-                                                  '2px',
-                                                color:
-                                                  '#666',
-                                                marginBottom:
-                                                  '6px',
-                                              }}
-                                            >
-                                              MODULE{' '}
-                                              {
-                                                module.display_order
-                                              }
-                                            </div>
-
-                                            <strong
-                                              style={{
-                                                fontSize:
-                                                  '18px',
-                                              }}
-                                            >
-                                              {
-                                                module.module_title
-                                              }
-                                            </strong>
-                                          </div>
+                                          {/* MODULE HEADER */}
 
                                           <div
                                             style={{
-                                              fontWeight:
-                                                '600',
-                                              fontSize:
-                                                '13px',
+                                              display:
+                                                'flex',
+                                              justifyContent:
+                                                'space-between',
+                                              alignItems:
+                                                'center',
+                                              gap: '15px',
                                             }}
                                           >
-                                            {module.status ===
-                                            'completed'
-                                              ? '✓ COMPLETED'
-                                              : 'PENDING'}
-                                          </div>
-                                        </div>
-
-                                        {/* COMPLETION DATE */}
-
-                                        {module.completed_at && (
-                                          <p
-                                            style={{
-                                              margin:
-                                                '10px 0 0',
-                                              color:
-                                                '#555',
-                                              fontSize:
-                                                '14px',
-                                            }}
-                                          >
-                                            Completed:{' '}
-                                            {formatDate(
-                                              module.completed_at
-                                            )}
-                                          </p>
-                                        )}
-
-                                        {/* --------------------------------
-                                            QUIZ
-                                        -------------------------------- */}
-
-                                        {module.quiz && (
-                                          <div
-                                            style={{
-                                              borderTop:
-                                                '1px solid #eee',
-                                              marginTop:
-                                                '18px',
-                                              paddingTop:
-                                                '18px',
-                                            }}
-                                          >
-                                            <div
-                                              style={{
-                                                display:
-                                                  'flex',
-                                                justifyContent:
-                                                  'space-between',
-                                                alignItems:
-                                                  'center',
-                                                marginBottom:
-                                                  '8px',
-                                              }}
-                                            >
-                                              <div>
-                                                <div
-                                                  style={{
-                                                    fontSize:
-                                                      '11px',
-                                                    letterSpacing:
-                                                      '2px',
-                                                    color:
-                                                      '#666',
-                                                    marginBottom:
-                                                      '5px',
-                                                  }}
-                                                >
-                                                  QUIZ
-                                                </div>
-
-                                                <strong>
-                                                  {
-                                                    module
-                                                      .quiz
-                                                      .quiz_title
-                                                  }
-                                                </strong>
-                                              </div>
-
+                                            <div>
                                               <div
                                                 style={{
                                                   fontSize:
-                                                    '13px',
+                                                    '11px',
+                                                  letterSpacing:
+                                                    '2px',
                                                   color:
-                                                    '#555',
+                                                    '#666',
+                                                  marginBottom:
+                                                    '6px',
+                                                }}
+                                              >
+                                                MODULE{' '}
+                                                {
+                                                  module.display_order
+                                                }
+                                              </div>
+
+                                              <strong
+                                                style={{
+                                                  fontSize:
+                                                    '18px',
                                                 }}
                                               >
                                                 {
-                                                  module
-                                                    .quiz
-                                                    .attempts
-                                                    .length
-                                                }{' '}
-                                                /{' '}
-                                                {
-                                                  module
-                                                    .quiz
-                                                    .max_attempts
-                                                }{' '}
-                                                attempts
-                                              </div>
+                                                  module.module_title
+                                                }
+                                              </strong>
                                             </div>
 
+                                            <div
+                                              style={{
+                                                fontWeight:
+                                                  '600',
+                                                fontSize:
+                                                  '13px',
+                                              }}
+                                            >
+                                              {module.status ===
+                                              'completed'
+                                                ? '✓ COMPLETED'
+                                                : 'PENDING'}
+                                            </div>
+                                          </div>
+
+                                          {/* COMPLETION DATE */}
+
+                                          {module.completed_at && (
                                             <p
                                               style={{
                                                 margin:
-                                                  '8px 0 15px',
+                                                  '10px 0 0',
                                                 color:
                                                   '#555',
                                                 fontSize:
                                                   '14px',
                                               }}
                                             >
-                                              Passing
-                                              score:{' '}
-                                              {
-                                                module
-                                                  .quiz
-                                                  .passing_score
-                                              }
+                                              Completed:{' '}
+                                              {formatDate(
+                                                module.completed_at
+                                              )}
                                             </p>
+                                          )}
 
-                                            {/* NO ATTEMPTS */}
+                                          {/* QUIZ */}
 
-                                            {attempts.length ===
-                                              0 && (
+                                          {module.quiz && (
+                                            <div
+                                              style={{
+                                                borderTop:
+                                                  '1px solid #eee',
+                                                marginTop:
+                                                  '18px',
+                                                paddingTop:
+                                                  '18px',
+                                              }}
+                                            >
                                               <div
                                                 style={{
-                                                  padding:
-                                                    '12px',
-                                                  background:
-                                                    '#f7f7f7',
+                                                  display:
+                                                    'flex',
+                                                  justifyContent:
+                                                    'space-between',
+                                                  alignItems:
+                                                    'center',
+                                                  marginBottom:
+                                                    '8px',
+                                                }}
+                                              >
+                                                <div>
+                                                  <div
+                                                    style={{
+                                                      fontSize:
+                                                        '11px',
+                                                      letterSpacing:
+                                                        '2px',
+                                                      color:
+                                                        '#666',
+                                                      marginBottom:
+                                                        '5px',
+                                                    }}
+                                                  >
+                                                    QUIZ
+                                                  </div>
+
+                                                  <strong>
+                                                    {
+                                                      module
+                                                        .quiz
+                                                        .quiz_title
+                                                    }
+                                                  </strong>
+                                                </div>
+
+                                                <div
+                                                  style={{
+                                                    fontSize:
+                                                      '13px',
+                                                    color:
+                                                      '#555',
+                                                  }}
+                                                >
+                                                  {
+                                                    module
+                                                      .quiz
+                                                      .attempts
+                                                      .length
+                                                  }{' '}
+                                                  /{' '}
+                                                  {
+                                                    module
+                                                      .quiz
+                                                      .max_attempts
+                                                  }{' '}
+                                                  attempts
+                                                </div>
+                                              </div>
+
+                                              <p
+                                                style={{
+                                                  margin:
+                                                    '8px 0 15px',
+                                                  color:
+                                                    '#555',
                                                   fontSize:
                                                     '14px',
                                                 }}
                                               >
-                                                No quiz
-                                                attempts
-                                                yet.
-                                              </div>
-                                            )}
+                                                Passing
+                                                score:{' '}
+                                                {
+                                                  module
+                                                    .quiz
+                                                    .passing_score
+                                                }
+                                              </p>
 
-                                            {/* ATTEMPTS */}
+                                              {/* NO ATTEMPTS */}
 
-                                            {attempts.length >
-                                              0 && (
-                                              <div>
-                                                {attempts.map(
-                                                  (
-                                                    attempt,
-                                                    index
-                                                  ) => (
+                                              {attempts.length ===
+                                                0 && (
+                                                <div
+                                                  style={{
+                                                    padding:
+                                                      '12px',
+                                                    background:
+                                                      '#f7f7f7',
+                                                    fontSize:
+                                                      '14px',
+                                                  }}
+                                                >
+                                                  No quiz
+                                                  attempts
+                                                  yet.
+                                                </div>
+                                              )}
+
+                                              {/* ATTEMPTS */}
+
+                                              {attempts.length >
+                                                0 && (
+                                                <div>
+                                                  {attempts.map(
+                                                    (
+                                                      attempt,
+                                                      index
+                                                    ) => (
+                                                      <div
+                                                        key={
+                                                          attempt.attempt_id
+                                                        }
+                                                        style={{
+                                                          display:
+                                                            'grid',
+                                                          gridTemplateColumns:
+                                                            '1fr 1fr 1fr 1.5fr',
+                                                          gap:
+                                                            '10px',
+                                                          alignItems:
+                                                            'center',
+                                                          borderTop:
+                                                            '1px solid #eee',
+                                                          padding:
+                                                            '11px 0',
+                                                          fontSize:
+                                                            '14px',
+                                                        }}
+                                                      >
+                                                        <span>
+                                                          Attempt{' '}
+                                                          {index +
+                                                            1}
+                                                        </span>
+
+                                                        <span>
+                                                          Score:{' '}
+                                                          <strong>
+                                                            {
+                                                              attempt.score
+                                                            }
+                                                          </strong>
+                                                        </span>
+
+                                                        <span
+                                                          style={{
+                                                            fontWeight:
+                                                              '600',
+                                                          }}
+                                                        >
+                                                          {attempt.passed
+                                                            ? '✓ PASSED'
+                                                            : '✗ FAILED'}
+                                                        </span>
+
+                                                        <span
+                                                          style={{
+                                                            color:
+                                                              '#666',
+                                                            textAlign:
+                                                              'right',
+                                                          }}
+                                                        >
+                                                          {formatDate(
+                                                            attempt.attempted_at
+                                                          )}
+                                                        </span>
+                                                      </div>
+                                                    )
+                                                  )}
+
+                                                  {/* LATEST ATTEMPT */}
+
+                                                  {latestAttempt && (
                                                     <div
-                                                      key={
-                                                        attempt.attempt_id
-                                                      }
                                                       style={{
-                                                        display:
-                                                          'grid',
-                                                        gridTemplateColumns:
-                                                          '1fr 1fr 1fr 1.5fr',
-                                                        gap:
-                                                          '10px',
-                                                        alignItems:
-                                                          'center',
-                                                        borderTop:
-                                                          '1px solid #eee',
+                                                        marginTop:
+                                                          '12px',
                                                         padding:
-                                                          '11px 0',
+                                                          '12px 15px',
+                                                        background:
+                                                          '#f7f7f7',
+                                                        border:
+                                                          '1px solid #ddd',
                                                         fontSize:
                                                           '14px',
                                                       }}
                                                     >
-                                                      <span>
-                                                        Attempt{' '}
-                                                        {index +
-                                                          1}
-                                                      </span>
-
-                                                      <span>
-                                                        Score:{' '}
-                                                        <strong>
-                                                          {
-                                                            attempt.score
-                                                          }
-                                                        </strong>
-                                                      </span>
-
-                                                      <span
-                                                        style={{
-                                                          fontWeight:
-                                                            '600',
-                                                        }}
-                                                      >
-                                                        {attempt.passed
-                                                          ? '✓ PASSED'
-                                                          : '✗ FAILED'}
-                                                      </span>
-
-                                                      <span
-                                                        style={{
-                                                          color:
-                                                            '#666',
-                                                          textAlign:
-                                                            'right',
-                                                        }}
-                                                      >
-                                                        {formatDate(
-                                                          attempt.attempted_at
-                                                        )}
-                                                      </span>
+                                                      <strong>
+                                                        Latest
+                                                        attempt:
+                                                      </strong>{' '}
+                                                      Score{' '}
+                                                      {
+                                                        latestAttempt.score
+                                                      }{' '}
+                                                      —{' '}
+                                                      {latestAttempt.passed
+                                                        ? 'Passed'
+                                                        : 'Failed'}
                                                     </div>
-                                                  )
-                                                )}
-
-                                                {/* LATEST ATTEMPT */}
-
-                                                {latestAttempt && (
-                                                  <div
-                                                    style={{
-                                                      marginTop:
-                                                        '12px',
-                                                      padding:
-                                                        '12px 15px',
-                                                      background:
-                                                        '#f7f7f7',
-                                                      border:
-                                                        '1px solid #ddd',
-                                                      fontSize:
-                                                        '14px',
-                                                    }}
-                                                  >
-                                                    <strong>
-                                                      Latest
-                                                      attempt:
-                                                    </strong>{' '}
-                                                    Score{' '}
-                                                    {
-                                                      latestAttempt.score
-                                                    }{' '}
-                                                    —{' '}
-                                                    {latestAttempt.passed
-                                                      ? 'Passed'
-                                                      : 'Failed'}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            )}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )
-                                  }
-                                )}
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    }
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )
+                            )
+                          }
                         )}
                       </div>
                     )}

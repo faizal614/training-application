@@ -27,6 +27,30 @@ function ManageQuiz() {
   const [quizTitle, setQuizTitle] = useState('')
   const [passingScore, setPassingScore] = useState(70)
   const [maxAttempts, setMaxAttempts] = useState(3)
+  const [randomizeQuestions, setRandomizeQuestions] =
+    useState(false)
+
+  // ---------------------------------------------------------
+  // EDIT QUIZ STATE
+  // ---------------------------------------------------------
+
+  const [editingQuizId, setEditingQuizId] =
+    useState(null)
+
+  const [editQuizTitle, setEditQuizTitle] =
+    useState('')
+
+  const [editPassingScore, setEditPassingScore] =
+    useState(70)
+
+  const [editMaxAttempts, setEditMaxAttempts] =
+    useState(3)
+
+  const [editRandomizeQuestions, setEditRandomizeQuestions] =
+    useState(false)
+
+  const [savingQuiz, setSavingQuiz] =
+    useState(false)
 
   // ---------------------------------------------------------
   // CREATE QUESTION FORM
@@ -36,6 +60,22 @@ function ManageQuiz() {
   const [questionOrder, setQuestionOrder] = useState(1)
 
   // ---------------------------------------------------------
+  // EDIT QUESTION STATE
+  // ---------------------------------------------------------
+
+  const [editingQuestionId, setEditingQuestionId] =
+    useState(null)
+
+  const [editQuestionText, setEditQuestionText] =
+    useState('')
+
+  const [editQuestionOrder, setEditQuestionOrder] =
+    useState(1)
+
+  const [savingQuestion, setSavingQuestion] =
+    useState(false)
+
+  // ---------------------------------------------------------
   // CREATE ANSWER FORM
   // ---------------------------------------------------------
 
@@ -43,6 +83,25 @@ function ManageQuiz() {
   const [answerText, setAnswerText] = useState('')
   const [answerOrder, setAnswerOrder] = useState(1)
   const [isCorrect, setIsCorrect] = useState(false)
+
+  // ---------------------------------------------------------
+  // EDIT ANSWER STATE
+  // ---------------------------------------------------------
+
+  const [editingAnswerId, setEditingAnswerId] =
+    useState(null)
+
+  const [editAnswerText, setEditAnswerText] =
+    useState('')
+
+  const [editAnswerOrder, setEditAnswerOrder] =
+    useState(1)
+
+  const [editIsCorrect, setEditIsCorrect] =
+    useState(false)
+
+  const [savingAnswer, setSavingAnswer] =
+    useState(false)
 
   // ---------------------------------------------------------
   // LOAD COURSES
@@ -202,20 +261,13 @@ function ManageQuiz() {
         )
       }
 
-      // -----------------------------------------------------
-      // DEBUG
-      // -----------------------------------------------------
-      // This lets us verify that the backend is returning
-      // is_correct for every answer.
-      //
-      // You can remove this console.log later.
-      // -----------------------------------------------------
-
-      console.log('Questions API response:', data)
+      console.log(
+        'Questions API response:',
+        data
+      )
 
       setQuestions(data)
 
-      // Set next question order
       setQuestionOrder(data.length + 1)
     } catch (err) {
       setError(err.message)
@@ -270,6 +322,9 @@ function ManageQuiz() {
             title: quizTitle.trim(),
             passing_score: Number(passingScore),
             max_attempts: Number(maxAttempts),
+            randomize_questions: Boolean(
+              randomizeQuestions
+            ),
           }),
         }
       )
@@ -285,6 +340,7 @@ function ManageQuiz() {
       setQuizTitle('')
       setPassingScore(70)
       setMaxAttempts(3)
+      setRandomizeQuestions(false)
 
       setQuizzes([data])
       setSelectedQuiz(data)
@@ -296,6 +352,113 @@ function ManageQuiz() {
       await loadQuestions(data.id)
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  // ---------------------------------------------------------
+  // START EDITING QUIZ
+  // ---------------------------------------------------------
+
+  const handleEditQuiz = (quiz) => {
+    setError('')
+    setSuccess('')
+
+    setEditingQuizId(quiz.id)
+
+    setEditQuizTitle(quiz.title || '')
+    setEditPassingScore(
+      quiz.passing_score ?? 70
+    )
+    setEditMaxAttempts(
+      quiz.max_attempts ?? 3
+    )
+    setEditRandomizeQuestions(
+      Boolean(quiz.randomize_questions)
+    )
+  }
+
+  // ---------------------------------------------------------
+  // CANCEL EDITING QUIZ
+  // ---------------------------------------------------------
+
+  const handleCancelEditQuiz = () => {
+    setEditingQuizId(null)
+
+    setEditQuizTitle('')
+    setEditPassingScore(70)
+    setEditMaxAttempts(3)
+    setEditRandomizeQuestions(false)
+  }
+
+  // ---------------------------------------------------------
+  // UPDATE QUIZ
+  // ---------------------------------------------------------
+
+  const handleUpdateQuiz = async (quizId) => {
+    if (!editQuizTitle.trim()) {
+      setError('Please enter a quiz title.')
+      return
+    }
+
+    if (
+      Number(editPassingScore) < 0 ||
+      Number(editPassingScore) > 100
+    ) {
+      setError('Passing score must be between 0 and 100.')
+      return
+    }
+
+    if (Number(editMaxAttempts) < 1) {
+      setError('Maximum attempts must be at least 1.')
+      return
+    }
+
+    try {
+      setSavingQuiz(true)
+      setError('')
+      setSuccess('')
+
+      const response = await apiFetch(
+        `/modules/quiz/${quizId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            title: editQuizTitle.trim(),
+            passing_score: Number(
+              editPassingScore
+            ),
+            max_attempts: Number(
+              editMaxAttempts
+            ),
+            randomize_questions:
+              Boolean(editRandomizeQuestions),
+          }),
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail || 'Failed to update quiz'
+        )
+      }
+
+      setQuizzes([data])
+      setSelectedQuiz(data)
+
+      setEditingQuizId(null)
+
+      setSuccess('Quiz updated successfully.')
+
+      await loadQuestions(data.id)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingQuiz(false)
     }
   }
 
@@ -335,6 +498,8 @@ function ManageQuiz() {
       setSelectedQuiz(null)
       setQuestions([])
       setSelectedQuestion(null)
+
+      setEditingQuizId(null)
 
       setSuccess('Quiz deleted successfully.')
     } catch (err) {
@@ -393,17 +558,173 @@ function ManageQuiz() {
       ]
 
       setQuestions(updatedQuestions)
-      setQuestionOrder(updatedQuestions.length + 1)
+      setQuestionOrder(
+        updatedQuestions.length + 1
+      )
 
-      setSuccess('Question created successfully.')
+      setSuccess(
+        'Question created successfully.'
+      )
 
-      // Automatically select the new question
       setSelectedQuestion(data)
 
-      // Start answer order at 1
       setAnswerOrder(1)
       setAnswerText('')
       setIsCorrect(false)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // ---------------------------------------------------------
+  // START EDITING QUESTION
+  // ---------------------------------------------------------
+
+  const handleEditQuestion = (question) => {
+    setError('')
+    setSuccess('')
+
+    setEditingQuestionId(question.id)
+
+    setEditQuestionText(
+      question.question_text || ''
+    )
+
+    setEditQuestionOrder(
+      question.display_order ?? 1
+    )
+  }
+
+  // ---------------------------------------------------------
+  // CANCEL EDITING QUESTION
+  // ---------------------------------------------------------
+
+  const handleCancelEditQuestion = () => {
+    setEditingQuestionId(null)
+
+    setEditQuestionText('')
+    setEditQuestionOrder(1)
+  }
+
+  // ---------------------------------------------------------
+  // UPDATE QUESTION
+  // ---------------------------------------------------------
+
+  const handleUpdateQuestion = async (
+    questionId
+  ) => {
+    if (!editQuestionText.trim()) {
+      setError('Please enter a question.')
+      return
+    }
+
+    if (Number(editQuestionOrder) < 1) {
+      setError(
+        'Question display order must be at least 1.'
+      )
+      return
+    }
+
+    try {
+      setSavingQuestion(true)
+      setError('')
+      setSuccess('')
+
+      const response = await apiFetch(
+        `/modules/questions/${questionId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            question_text:
+              editQuestionText.trim(),
+            display_order:
+              Number(editQuestionOrder),
+          }),
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail ||
+            'Failed to update question'
+        )
+      }
+
+      setEditingQuestionId(null)
+
+      setSuccess(
+        'Question updated successfully.'
+      )
+
+      if (selectedQuiz) {
+        await loadQuestions(selectedQuiz.id)
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingQuestion(false)
+    }
+  }
+
+  // ---------------------------------------------------------
+  // DELETE QUESTION
+  // ---------------------------------------------------------
+
+  const handleDeleteQuestion = async (
+    questionId
+  ) => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this question? This will also delete its answers.'
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setError('')
+      setSuccess('')
+
+      const response = await apiFetch(
+        `/modules/questions/${questionId}`,
+        {
+          method: 'DELETE',
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail ||
+            'Failed to delete question'
+        )
+      }
+
+      if (
+        selectedQuestion &&
+        selectedQuestion.id === questionId
+      ) {
+        setSelectedQuestion(null)
+        setAnswerText('')
+        setAnswerOrder(1)
+        setIsCorrect(false)
+      }
+
+      setEditingQuestionId(null)
+
+      setSuccess(
+        'Question deleted successfully.'
+      )
+
+      if (selectedQuiz) {
+        await loadQuestions(selectedQuiz.id)
+      }
     } catch (err) {
       setError(err.message)
     }
@@ -456,12 +777,165 @@ function ManageQuiz() {
       setAnswerText('')
       setIsCorrect(false)
 
-      setAnswerOrder((previous) => Number(previous) + 1)
+      setAnswerOrder(
+        (previous) => Number(previous) + 1
+      )
 
-      setSuccess('Answer created successfully.')
+      setSuccess(
+        'Answer created successfully.'
+      )
 
-      // Refresh questions so the newly-created answer
-      // and its correctness value appear immediately.
+      if (selectedQuiz) {
+        await loadQuestions(selectedQuiz.id)
+      }
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // ---------------------------------------------------------
+  // START EDITING ANSWER
+  // ---------------------------------------------------------
+
+  const handleEditAnswer = (answer) => {
+    setError('')
+    setSuccess('')
+
+    setEditingAnswerId(answer.id)
+
+    setEditAnswerText(
+      answer.answer_text || ''
+    )
+
+    setEditAnswerOrder(
+      answer.display_order ?? 1
+    )
+
+    setEditIsCorrect(
+      Boolean(answer.is_correct)
+    )
+  }
+
+  // ---------------------------------------------------------
+  // CANCEL EDITING ANSWER
+  // ---------------------------------------------------------
+
+  const handleCancelEditAnswer = () => {
+    setEditingAnswerId(null)
+
+    setEditAnswerText('')
+    setEditAnswerOrder(1)
+    setEditIsCorrect(false)
+  }
+
+  // ---------------------------------------------------------
+  // UPDATE ANSWER
+  // ---------------------------------------------------------
+
+  const handleUpdateAnswer = async (
+    answerId
+  ) => {
+    if (!editAnswerText.trim()) {
+      setError('Please enter an answer.')
+      return
+    }
+
+    if (Number(editAnswerOrder) < 1) {
+      setError(
+        'Answer display order must be at least 1.'
+      )
+      return
+    }
+
+    try {
+      setSavingAnswer(true)
+      setError('')
+      setSuccess('')
+
+      const response = await apiFetch(
+        `/modules/answers/${answerId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            answer_text:
+              editAnswerText.trim(),
+            is_correct:
+              Boolean(editIsCorrect),
+            display_order:
+              Number(editAnswerOrder),
+          }),
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail ||
+            'Failed to update answer'
+        )
+      }
+
+      setEditingAnswerId(null)
+
+      setSuccess(
+        'Answer updated successfully.'
+      )
+
+      if (selectedQuiz) {
+        await loadQuestions(selectedQuiz.id)
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingAnswer(false)
+    }
+  }
+
+  // ---------------------------------------------------------
+  // DELETE ANSWER
+  // ---------------------------------------------------------
+
+  const handleDeleteAnswer = async (
+    answerId
+  ) => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this answer?'
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setError('')
+      setSuccess('')
+
+      const response = await apiFetch(
+        `/modules/answers/${answerId}`,
+        {
+          method: 'DELETE',
+        }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail ||
+            'Failed to delete answer'
+        )
+      }
+
+      setEditingAnswerId(null)
+
+      setSuccess(
+        'Answer deleted successfully.'
+      )
+
       if (selectedQuiz) {
         await loadQuestions(selectedQuiz.id)
       }
@@ -477,7 +951,9 @@ function ManageQuiz() {
   const handleSelectQuestion = (question) => {
     setSelectedQuestion(question)
 
-    const answers = Array.isArray(question.answers)
+    const answers = Array.isArray(
+      question.answers
+    )
       ? question.answers
       : []
 
@@ -486,11 +962,11 @@ function ManageQuiz() {
     setAnswerText('')
     setIsCorrect(false)
 
-    // Scroll to the Add Answer section
     setTimeout(() => {
-      const element = document.getElementById(
-        'add-answer-section'
-      )
+      const element =
+        document.getElementById(
+          'add-answer-section'
+        )
 
       if (element) {
         element.scrollIntoView({
@@ -619,7 +1095,9 @@ function ManageQuiz() {
             <select
               value={selectedCourse}
               onChange={(event) =>
-                setSelectedCourse(event.target.value)
+                setSelectedCourse(
+                  event.target.value
+                )
               }
               style={inputStyle}
             >
@@ -654,7 +1132,9 @@ function ManageQuiz() {
             <select
               value={selectedModule}
               onChange={(event) =>
-                setSelectedModule(event.target.value)
+                setSelectedModule(
+                  event.target.value
+                )
               }
               style={inputStyle}
               disabled={!selectedCourse}
@@ -691,7 +1171,9 @@ function ManageQuiz() {
               type="text"
               value={quizTitle}
               onChange={(event) =>
-                setQuizTitle(event.target.value)
+                setQuizTitle(
+                  event.target.value
+                )
               }
               placeholder="Enter quiz title"
               style={inputStyle}
@@ -717,7 +1199,9 @@ function ManageQuiz() {
               max="100"
               value={passingScore}
               onChange={(event) =>
-                setPassingScore(event.target.value)
+                setPassingScore(
+                  event.target.value
+                )
               }
               style={inputStyle}
             />
@@ -725,7 +1209,7 @@ function ManageQuiz() {
 
           {/* MAX ATTEMPTS */}
 
-          <div style={{ marginBottom: '25px' }}>
+          <div style={{ marginBottom: '20px' }}>
             <label
               style={{
                 display: 'block',
@@ -741,10 +1225,50 @@ function ManageQuiz() {
               min="1"
               value={maxAttempts}
               onChange={(event) =>
-                setMaxAttempts(event.target.value)
+                setMaxAttempts(
+                  event.target.value
+                )
               }
               style={inputStyle}
             />
+          </div>
+
+          {/* RANDOMIZE QUESTIONS */}
+
+          <div style={{ marginBottom: '25px' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={randomizeQuestions}
+                onChange={(event) =>
+                  setRandomizeQuestions(
+                    event.target.checked
+                  )
+                }
+              />
+
+              <span>
+                Randomize Questions
+              </span>
+            </label>
+
+            <p
+              style={{
+                margin: '8px 0 0 26px',
+                color: '#555',
+                fontSize: '14px',
+              }}
+            >
+              Show quiz questions in a different order
+              for learners.
+            </p>
           </div>
 
           <button
@@ -783,7 +1307,9 @@ function ManageQuiz() {
 
           <span>
             {quizzes.length}{' '}
-            {quizzes.length === 1 ? 'quiz' : 'quizzes'}
+            {quizzes.length === 1
+              ? 'quiz'
+              : 'quizzes'}
           </span>
         </div>
 
@@ -791,16 +1317,17 @@ function ManageQuiz() {
           <p>Loading quiz...</p>
         )}
 
-        {!quizLoading && quizzes.length === 0 && (
-          <div
-            style={{
-              border: '1px solid #ccc',
-              padding: '25px',
-            }}
-          >
-            No quiz exists for this module yet.
-          </div>
-        )}
+        {!quizLoading &&
+          quizzes.length === 0 && (
+            <div
+              style={{
+                border: '1px solid #ccc',
+                padding: '25px',
+              }}
+            >
+              No quiz exists for this module yet.
+            </div>
+          )}
 
         {quizzes.map((quiz) => (
           <div
@@ -821,41 +1348,219 @@ function ManageQuiz() {
               QUIZ ID: {quiz.id}
             </div>
 
-            <h3
-              style={{
-                fontFamily: 'Georgia, serif',
-                fontSize: '30px',
-                fontWeight: '400',
-                margin: '0 0 20px',
-              }}
-            >
-              {quiz.title}
-            </h3>
+            {editingQuizId === quiz.id ? (
+              <>
+                {/* EDIT QUIZ TITLE */}
 
-            <p>
-              <strong>Module ID:</strong>{' '}
-              {quiz.module_id}
-            </p>
+                <div
+                  style={{
+                    marginBottom: '20px',
+                  }}
+                >
+                  <label
+                    style={{
+                      display: 'block',
+                      fontWeight: '600',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    Quiz Title
+                  </label>
 
-            <p>
-              <strong>Passing Score:</strong>{' '}
-              {quiz.passing_score}%
-            </p>
+                  <input
+                    type="text"
+                    value={editQuizTitle}
+                    onChange={(event) =>
+                      setEditQuizTitle(
+                        event.target.value
+                      )
+                    }
+                    style={inputStyle}
+                  />
+                </div>
 
-            <p>
-              <strong>Maximum Attempts:</strong>{' '}
-              {quiz.max_attempts}
-            </p>
+                {/* EDIT PASSING SCORE */}
 
-            <button
-              type="button"
-              onClick={() =>
-                handleDeleteQuiz(quiz.id)
-              }
-              style={dangerButtonStyle}
-            >
-              Delete Quiz
-            </button>
+                <div
+                  style={{
+                    marginBottom: '20px',
+                  }}
+                >
+                  <label
+                    style={{
+                      display: 'block',
+                      fontWeight: '600',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    Passing Score (%)
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={editPassingScore}
+                    onChange={(event) =>
+                      setEditPassingScore(
+                        event.target.value
+                      )
+                    }
+                    style={inputStyle}
+                  />
+                </div>
+
+                {/* EDIT MAX ATTEMPTS */}
+
+                <div
+                  style={{
+                    marginBottom: '20px',
+                  }}
+                >
+                  <label
+                    style={{
+                      display: 'block',
+                      fontWeight: '600',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    Maximum Attempts
+                  </label>
+
+                  <input
+                    type="number"
+                    min="1"
+                    value={editMaxAttempts}
+                    onChange={(event) =>
+                      setEditMaxAttempts(
+                        event.target.value
+                      )
+                    }
+                    style={inputStyle}
+                  />
+                </div>
+
+                {/* EDIT RANDOMIZATION */}
+
+                <div
+                  style={{
+                    marginBottom: '25px',
+                  }}
+                >
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        editRandomizeQuestions
+                      }
+                      onChange={(event) =>
+                        setEditRandomizeQuestions(
+                          event.target.checked
+                        )
+                      }
+                    />
+
+                    <span>
+                      Randomize Questions
+                    </span>
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  style={primaryButtonStyle}
+                  onClick={() =>
+                    handleUpdateQuiz(quiz.id)
+                  }
+                  disabled={savingQuiz}
+                >
+                  {savingQuiz
+                    ? 'Saving...'
+                    : 'Save Quiz'}
+                </button>
+
+                <button
+                  type="button"
+                  style={secondaryButtonStyle}
+                  onClick={
+                    handleCancelEditQuiz
+                  }
+                  disabled={savingQuiz}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <h3
+                  style={{
+                    fontFamily: 'Georgia, serif',
+                    fontSize: '30px',
+                    fontWeight: '400',
+                    margin: '0 0 20px',
+                  }}
+                >
+                  {quiz.title}
+                </h3>
+
+                <p>
+                  <strong>Module ID:</strong>{' '}
+                  {quiz.module_id}
+                </p>
+
+                <p>
+                  <strong>
+                    Passing Score:
+                  </strong>{' '}
+                  {quiz.passing_score}%
+                </p>
+
+                <p>
+                  <strong>
+                    Maximum Attempts:
+                  </strong>{' '}
+                  {quiz.max_attempts}
+                </p>
+
+                <p>
+                  <strong>
+                    Randomize Questions:
+                  </strong>{' '}
+                  {quiz.randomize_questions
+                    ? 'Enabled'
+                    : 'Disabled'}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleEditQuiz(quiz)
+                  }
+                  style={secondaryButtonStyle}
+                >
+                  Edit Quiz
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleDeleteQuiz(
+                      quiz.id
+                    )
+                  }
+                  style={dangerButtonStyle}
+                >
+                  Delete Quiz
+                </button>
+              </>
+            )}
           </div>
         ))}
       </section>
@@ -909,7 +1614,11 @@ function ManageQuiz() {
                 />
               </div>
 
-              <div style={{ marginBottom: '25px' }}>
+              <div
+                style={{
+                  marginBottom: '25px',
+                }}
+              >
                 <label
                   style={{
                     display: 'block',
@@ -1010,27 +1719,162 @@ function ManageQuiz() {
                   {question.id}
                 </div>
 
-                <h3
-                  style={{
-                    fontFamily: 'Georgia, serif',
-                    fontSize: '28px',
-                    fontWeight: '400',
-                    margin: '0 0 15px',
-                  }}
-                >
-                  {question.question_text}
-                </h3>
+                {editingQuestionId ===
+                question.id ? (
+                  <>
+                    {/* EDIT QUESTION */}
 
-                <p>
-                  <strong>Display Order:</strong>{' '}
-                  {question.display_order}
-                </p>
+                    <div
+                      style={{
+                        marginBottom: '20px',
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: 'block',
+                          fontWeight: '600',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        Question
+                      </label>
+
+                      <textarea
+                        value={
+                          editQuestionText
+                        }
+                        onChange={(event) =>
+                          setEditQuestionText(
+                            event.target.value
+                          )
+                        }
+                        rows="4"
+                        style={textareaStyle}
+                      />
+                    </div>
+
+                    {/* EDIT QUESTION ORDER */}
+
+                    <div
+                      style={{
+                        marginBottom: '25px',
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: 'block',
+                          fontWeight: '600',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        Display Order
+                      </label>
+
+                      <input
+                        type="number"
+                        min="1"
+                        value={
+                          editQuestionOrder
+                        }
+                        onChange={(event) =>
+                          setEditQuestionOrder(
+                            event.target.value
+                          )
+                        }
+                        style={inputStyle}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      style={primaryButtonStyle}
+                      onClick={() =>
+                        handleUpdateQuestion(
+                          question.id
+                        )
+                      }
+                      disabled={savingQuestion}
+                    >
+                      {savingQuestion
+                        ? 'Saving...'
+                        : 'Save Question'}
+                    </button>
+
+                    <button
+                      type="button"
+                      style={
+                        secondaryButtonStyle
+                      }
+                      onClick={
+                        handleCancelEditQuestion
+                      }
+                      disabled={savingQuestion}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <h3
+                      style={{
+                        fontFamily:
+                          'Georgia, serif',
+                        fontSize: '28px',
+                        fontWeight: '400',
+                        margin:
+                          '0 0 15px',
+                      }}
+                    >
+                      {
+                        question.question_text
+                      }
+                    </h3>
+
+                    <p>
+                      <strong>
+                        Display Order:
+                      </strong>{' '}
+                      {
+                        question.display_order
+                      }
+                    </p>
+
+                    <button
+                      type="button"
+                      style={
+                        secondaryButtonStyle
+                      }
+                      onClick={() =>
+                        handleEditQuestion(
+                          question
+                        )
+                      }
+                    >
+                      Edit Question
+                    </button>
+
+                    <button
+                      type="button"
+                      style={
+                        dangerButtonStyle
+                      }
+                      onClick={() =>
+                        handleDeleteQuestion(
+                          question.id
+                        )
+                      }
+                    >
+                      Delete Question
+                    </button>
+                  </>
+                )}
 
                 {/* ANSWERS */}
 
                 <div
                   style={{
-                    borderTop: '1px solid #ddd',
+                    borderTop:
+                      '1px solid #ddd',
                     marginTop: '20px',
                     paddingTop: '20px',
                   }}
@@ -1045,51 +1889,283 @@ function ManageQuiz() {
                     ANSWERS
                   </div>
 
-                  {Array.isArray(question.answers) &&
-                  question.answers.length > 0 ? (
+                  {Array.isArray(
+                    question.answers
+                  ) &&
+                  question.answers.length >
+                    0 ? (
                     question.answers.map(
-                      (answer, answerIndex) => (
+                      (
+                        answer,
+                        answerIndex
+                      ) => (
                         <div
-                          key={answer.id}
+                          key={
+                            answer.id
+                          }
                           style={{
-                            border: '1px solid #ddd',
-                            padding: '14px',
-                            marginBottom: '10px',
-                            display: 'flex',
-                            justifyContent:
-                              'space-between',
-                            alignItems: 'center',
-                            gap: '20px',
+                            border:
+                              '1px solid #ddd',
+                            padding:
+                              '14px',
+                            marginBottom:
+                              '10px',
                           }}
                         >
-                          <span>
-                            <strong>
-                              {answerIndex + 1}.
-                            </strong>{' '}
-                            {answer.answer_text}
-                          </span>
+                          {editingAnswerId ===
+                          answer.id ? (
+                            <>
+                              {/* EDIT ANSWER TEXT */}
 
-                          {/* -------------------------------- */}
-                          {/* CORRECTNESS */}
-                          {/* -------------------------------- */}
+                              <div
+                                style={{
+                                  marginBottom:
+                                    '15px',
+                                }}
+                              >
+                                <label
+                                  style={{
+                                    display:
+                                      'block',
+                                    fontWeight:
+                                      '600',
+                                    marginBottom:
+                                      '8px',
+                                  }}
+                                >
+                                  Answer
+                                </label>
 
-                          <strong
-                            style={{
-                              whiteSpace: 'nowrap',
-                              color:
-                                answer.is_correct === true
-                                  ? '#087f23'
-                                  : answer.is_correct === false
-                                  ? '#b00000'
-                                  : '#555',
-                            }}
-                          >
-                            {answer.is_correct === true
-                              ? 'Correct'
-                              : answer.is_correct === false
-                              ? 'Incorrect'
-                              : 'Correctness not returned'}
-                          </strong>
+                                <input
+                                  type="text"
+                                  value={
+                                    editAnswerText
+                                  }
+                                  onChange={(
+                                    event
+                                  ) =>
+                                    setEditAnswerText(
+                                      event
+                                        .target
+                                        .value
+                                    )
+                                  }
+                                  style={
+                                    inputStyle
+                                  }
+                                />
+                              </div>
+
+                              {/* EDIT ORDER */}
+
+                              <div
+                                style={{
+                                  marginBottom:
+                                    '15px',
+                                }}
+                              >
+                                <label
+                                  style={{
+                                    display:
+                                      'block',
+                                    fontWeight:
+                                      '600',
+                                    marginBottom:
+                                      '8px',
+                                  }}
+                                >
+                                  Display Order
+                                </label>
+
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={
+                                    editAnswerOrder
+                                  }
+                                  onChange={(
+                                    event
+                                  ) =>
+                                    setEditAnswerOrder(
+                                      event
+                                        .target
+                                        .value
+                                    )
+                                  }
+                                  style={
+                                    inputStyle
+                                  }
+                                />
+                              </div>
+
+                              {/* EDIT CORRECTNESS */}
+
+                              <div
+                                style={{
+                                  marginBottom:
+                                    '15px',
+                                }}
+                              >
+                                <label
+                                  style={{
+                                    display:
+                                      'flex',
+                                    alignItems:
+                                      'center',
+                                    gap: '10px',
+                                    cursor:
+                                      'pointer',
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      editIsCorrect
+                                    }
+                                    onChange={(
+                                      event
+                                    ) =>
+                                      setEditIsCorrect(
+                                        event
+                                          .target
+                                          .checked
+                                      )
+                                    }
+                                  />
+
+                                  <span>
+                                    This is the
+                                    correct
+                                    answer
+                                  </span>
+                                </label>
+                              </div>
+
+                              <button
+                                type="button"
+                                style={
+                                  primaryButtonStyle
+                                }
+                                onClick={() =>
+                                  handleUpdateAnswer(
+                                    answer.id
+                                  )
+                                }
+                                disabled={
+                                  savingAnswer
+                                }
+                              >
+                                {savingAnswer
+                                  ? 'Saving...'
+                                  : 'Save Answer'}
+                              </button>
+
+                              <button
+                                type="button"
+                                style={
+                                  secondaryButtonStyle
+                                }
+                                onClick={
+                                  handleCancelEditAnswer
+                                }
+                                disabled={
+                                  savingAnswer
+                                }
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <div
+                              style={{
+                                display:
+                                  'flex',
+                                justifyContent:
+                                  'space-between',
+                                alignItems:
+                                  'center',
+                                gap: '20px',
+                                flexWrap:
+                                  'wrap',
+                              }}
+                            >
+                              <span>
+                                <strong>
+                                  {answerIndex +
+                                    1}
+                                  .
+                                </strong>{' '}
+                                {
+                                  answer.answer_text
+                                }
+                              </span>
+
+                              <div
+                                style={{
+                                  display:
+                                    'flex',
+                                  alignItems:
+                                    'center',
+                                  gap: '10px',
+                                  flexWrap:
+                                    'wrap',
+                                }}
+                              >
+                                <strong
+                                  style={{
+                                    whiteSpace:
+                                      'nowrap',
+                                    color:
+                                      answer.is_correct ===
+                                      true
+                                        ? '#087f23'
+                                        : answer.is_correct ===
+                                          false
+                                        ? '#b00000'
+                                        : '#555',
+                                  }}
+                                >
+                                  {answer.is_correct ===
+                                  true
+                                    ? 'Correct'
+                                    : answer.is_correct ===
+                                      false
+                                    ? 'Incorrect'
+                                    : 'Correctness not returned'}
+                                </strong>
+
+                                <button
+  type="button"
+  onClick={() =>
+    handleEditAnswer(answer)
+  }
+  style={{
+    ...secondaryButtonStyle,
+    marginTop: 0,
+    marginRight: 0,
+    marginBottom: 0,
+  }}
+>
+  Edit Answer
+</button>
+
+<button
+  type="button"
+  onClick={() =>
+    handleDeleteAnswer(answer.id)
+  }
+  style={{
+    ...dangerButtonStyle,
+    marginTop: 0,
+    marginRight: 0,
+    marginBottom: 0,
+  }}
+>
+  Delete Answer
+</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )
                     )
@@ -1103,9 +2179,13 @@ function ManageQuiz() {
                 <button
                   type="button"
                   onClick={() =>
-                    handleSelectQuestion(question)
+                    handleSelectQuestion(
+                      question
+                    )
                   }
-                  style={secondaryButtonStyle}
+                  style={
+                    secondaryButtonStyle
+                  }
                 >
                   Add Answer
                 </button>
@@ -1128,7 +2208,8 @@ function ManageQuiz() {
             >
               <h2
                 style={{
-                  fontFamily: 'Georgia, serif',
+                  fontFamily:
+                    'Georgia, serif',
                   fontSize: '32px',
                   fontWeight: '400',
                   marginTop: 0,
@@ -1144,7 +2225,11 @@ function ManageQuiz() {
                 </strong>
               </p>
 
-              <form onSubmit={handleCreateAnswer}>
+              <form
+                onSubmit={
+                  handleCreateAnswer
+                }
+              >
                 {/* ANSWER TEXT */}
 
                 <div
@@ -1225,7 +2310,8 @@ function ManageQuiz() {
                       checked={isCorrect}
                       onChange={(event) =>
                         setIsCorrect(
-                          event.target.checked
+                          event.target
+                            .checked
                         )
                       }
                     />
@@ -1238,7 +2324,9 @@ function ManageQuiz() {
 
                 <button
                   type="submit"
-                  style={primaryButtonStyle}
+                  style={
+                    primaryButtonStyle
+                  }
                 >
                   Add Answer
                 </button>
@@ -1283,6 +2371,8 @@ const primaryButtonStyle = {
   fontSize: '15px',
   fontWeight: '600',
   cursor: 'pointer',
+  marginRight: '10px',
+  marginBottom: '10px',
 }
 
 const secondaryButtonStyle = {
@@ -1294,6 +2384,8 @@ const secondaryButtonStyle = {
   fontWeight: '600',
   cursor: 'pointer',
   marginTop: '15px',
+  marginRight: '10px',
+  marginBottom: '10px',
 }
 
 const dangerButtonStyle = {
@@ -1304,6 +2396,8 @@ const dangerButtonStyle = {
   fontSize: '15px',
   fontWeight: '600',
   cursor: 'pointer',
+  marginRight: '10px',
+  marginBottom: '10px',
 }
 
 export default ManageQuiz

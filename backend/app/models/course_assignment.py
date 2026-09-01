@@ -11,7 +11,9 @@ from backend.app.models.user import User
 class CourseAssignment(Base):
     __tablename__ = "course_assignments"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(
+        primary_key=True
+    )
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"),
@@ -29,6 +31,40 @@ class CourseAssignment(Base):
         nullable=False,
     )
 
+    # =====================================================
+    # COURSE DEADLINE
+    # =====================================================
+
+    deadline: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    # =====================================================
+    # DEADLINE REMINDER
+    # =====================================================
+    #
+    # Stores when the 1-hour-before-deadline reminder
+    # was sent.
+    #
+    # NULL = reminder has not been sent.
+    #
+    # This prevents the same learner from receiving
+    # the same reminder repeatedly.
+    #
+    # =====================================================
+
+    deadline_reminder_sent_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    # =====================================================
+    # RELATIONSHIPS
+    # =====================================================
+
     user: Mapped["User"] = relationship(
         back_populates="course_assignments",
     )
@@ -36,6 +72,10 @@ class CourseAssignment(Base):
     course: Mapped["Course"] = relationship(
         back_populates="assignments",
     )
+
+    # =====================================================
+    # CONSTRAINTS
+    # =====================================================
 
     __table_args__ = (
         UniqueConstraint(

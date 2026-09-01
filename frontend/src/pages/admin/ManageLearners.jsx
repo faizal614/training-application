@@ -1,9 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { useAuth } from '../../context/AuthContext'
 import { apiFetch } from '../../utils/api'
 
 function ManageLearners() {
+  // =========================================================
+  // AUTH
+  // =========================================================
+
+  const {
+    isAuthenticated,
+    token,
+    handleSessionExpired,
+  } = useAuth()
+
   // =========================================================
   // DATA
   // =========================================================
@@ -21,6 +32,25 @@ function ManageLearners() {
 
   const [selectedCourse, setSelectedCourse] =
     useState('')
+
+  // =========================================================
+  // NEW COURSE DEADLINE
+  // =========================================================
+
+  const [deadline, setDeadline] = useState('')
+
+  // =========================================================
+  // EDIT EXISTING DEADLINE
+  // =========================================================
+
+  const [editingDeadline, setEditingDeadline] =
+    useState(null)
+
+  const [editingDeadlineValue, setEditingDeadlineValue] =
+    useState('')
+
+  const [savingDeadline, setSavingDeadline] =
+    useState(null)
 
   // =========================================================
   // LOADING
@@ -59,10 +89,17 @@ function ManageLearners() {
   // =========================================================
 
   useEffect(() => {
+    if (!isAuthenticated || !token) {
+      return
+    }
+
     loadLearners()
     loadCourses()
     loadAssignments()
-  }, [])
+  }, [
+    isAuthenticated,
+    token,
+  ])
 
   // =========================================================
   // LOAD LEARNERS
@@ -74,7 +111,11 @@ function ManageLearners() {
       setError('')
 
       const response =
-        await apiFetch('/admin/learners')
+        await apiFetch(
+          '/admin/learners',
+          {},
+          handleSessionExpired
+        )
 
       const data =
         await response.json()
@@ -92,6 +133,13 @@ function ManageLearners() {
           : []
       )
     } catch (err) {
+      if (
+        err.message ===
+        'Session expired. Please sign in again.'
+      ) {
+        return
+      }
+
       setError(err.message)
       setLearners([])
     } finally {
@@ -108,7 +156,11 @@ function ManageLearners() {
       setCourseLoading(true)
 
       const response =
-        await apiFetch('/courses')
+        await apiFetch(
+          '/courses',
+          {},
+          handleSessionExpired
+        )
 
       const data =
         await response.json()
@@ -126,6 +178,13 @@ function ManageLearners() {
           : []
       )
     } catch (err) {
+      if (
+        err.message ===
+        'Session expired. Please sign in again.'
+      ) {
+        return
+      }
+
       setError(err.message)
       setCourses([])
     } finally {
@@ -143,7 +202,9 @@ function ManageLearners() {
 
       const response =
         await apiFetch(
-          '/admin/learners/courses'
+          '/admin/learners/courses',
+          {},
+          handleSessionExpired
         )
 
       const data =
@@ -162,6 +223,13 @@ function ManageLearners() {
           : []
       )
     } catch (err) {
+      if (
+        err.message ===
+        'Session expired. Please sign in again.'
+      ) {
+        return
+      }
+
       setError(err.message)
       setAssignments([])
     } finally {
@@ -174,28 +242,25 @@ function ManageLearners() {
   // =========================================================
 
   const handleSelectLearner = (learner) => {
-    // -------------------------------------------------------
-    // Clicking the currently selected learner closes
-    // the management section.
-    // -------------------------------------------------------
-
     if (
       selectedLearner &&
       selectedLearner.id === learner.id
     ) {
       setSelectedLearner(null)
       setSelectedCourse('')
+      setDeadline('')
+      setEditingDeadline(null)
+      setEditingDeadlineValue('')
       setError('')
       setSuccess('')
       return
     }
 
-    // -------------------------------------------------------
-    // Select new learner.
-    // -------------------------------------------------------
-
     setSelectedLearner(learner)
     setSelectedCourse('')
+    setDeadline('')
+    setEditingDeadline(null)
+    setEditingDeadlineValue('')
     setError('')
     setSuccess('')
   }
@@ -232,7 +297,8 @@ function ManageLearners() {
           `/admin/learners/${learner.id}/access?is_active=${newStatus}`,
           {
             method: 'PATCH',
-          }
+          },
+          handleSessionExpired
         )
 
       const data =
@@ -244,10 +310,6 @@ function ManageLearners() {
             `Failed to ${action} learner access`
         )
       }
-
-      // -----------------------------------------------------
-      // Update learner in list.
-      // -----------------------------------------------------
 
       setLearners(
         (previousLearners) =>
@@ -262,10 +324,6 @@ function ManageLearners() {
                 : item
           )
       )
-
-      // -----------------------------------------------------
-      // Update selected learner if necessary.
-      // -----------------------------------------------------
 
       if (
         selectedLearner &&
@@ -288,6 +346,13 @@ function ManageLearners() {
         } successfully.`
       )
     } catch (err) {
+      if (
+        err.message ===
+        'Session expired. Please sign in again.'
+      ) {
+        return
+      }
+
       setError(err.message)
     } finally {
       setSavingAccess(null)
@@ -323,7 +388,8 @@ function ManageLearners() {
           `/admin/learners/${learner.id}`,
           {
             method: 'DELETE',
-          }
+          },
+          handleSessionExpired
         )
 
       const data =
@@ -336,10 +402,6 @@ function ManageLearners() {
         )
       }
 
-      // -----------------------------------------------------
-      // Remove learner from UI.
-      // -----------------------------------------------------
-
       setLearners(
         (previousLearners) =>
           previousLearners.filter(
@@ -347,10 +409,6 @@ function ManageLearners() {
               item.id !== learner.id
           )
       )
-
-      // -----------------------------------------------------
-      // Remove learner's assignments from UI.
-      // -----------------------------------------------------
 
       setAssignments(
         (previousAssignments) =>
@@ -363,22 +421,28 @@ function ManageLearners() {
           )
       )
 
-      // -----------------------------------------------------
-      // Clear selected learner if deleted.
-      // -----------------------------------------------------
-
       if (
         selectedLearner &&
         selectedLearner.id === learner.id
       ) {
         setSelectedLearner(null)
         setSelectedCourse('')
+        setDeadline('')
+        setEditingDeadline(null)
+        setEditingDeadlineValue('')
       }
 
       setSuccess(
         `${learner.name} was deleted successfully.`
       )
     } catch (err) {
+      if (
+        err.message ===
+        'Session expired. Please sign in again.'
+      ) {
+        return
+      }
+
       setError(err.message)
     } finally {
       setDeletingLearner(null)
@@ -395,6 +459,9 @@ function ManageLearners() {
   ) => {
     event.preventDefault()
 
+    setError('')
+    setSuccess('')
+
     if (!learner) {
       setError(
         'Please select a learner first.'
@@ -409,10 +476,42 @@ function ManageLearners() {
       return
     }
 
+    // -------------------------------------------------------
+    // DEADLINE VALIDATION
+    // -------------------------------------------------------
+
+    if (deadline) {
+      const selectedDeadline =
+        new Date(deadline)
+
+      if (
+        Number.isNaN(
+          selectedDeadline.getTime()
+        )
+      ) {
+        setError(
+          'Please enter a valid deadline.'
+        )
+        return
+      }
+
+      if (
+        selectedDeadline.getTime() <=
+        Date.now()
+      ) {
+        setError(
+          'The deadline must be in the future.'
+        )
+        return
+      }
+    }
+
     try {
       setAssigningCourse(true)
-      setError('')
-      setSuccess('')
+
+      const deadlineValue = deadline
+        ? new Date(deadline).toISOString()
+        : null
 
       const response =
         await apiFetch(
@@ -426,8 +525,12 @@ function ManageLearners() {
             body: JSON.stringify({
               learner_id:
                 learner.id,
+
+              deadline:
+                deadlineValue,
             }),
-          }
+          },
+          handleSessionExpired
         )
 
       const data =
@@ -441,13 +544,23 @@ function ManageLearners() {
       }
 
       setSelectedCourse('')
+      setDeadline('')
 
       setSuccess(
-        `Course assigned to ${learner.name} successfully.`
+        deadlineValue
+          ? `Course assigned to ${learner.name} with a deadline successfully.`
+          : `Course assigned to ${learner.name} successfully.`
       )
 
       await loadAssignments()
     } catch (err) {
+      if (
+        err.message ===
+        'Session expired. Please sign in again.'
+      ) {
+        return
+      }
+
       setError(err.message)
     } finally {
       setAssigningCourse(false)
@@ -486,6 +599,367 @@ function ManageLearners() {
           assignment.course_id
         ) === Number(courseId)
     )
+  }
+
+  // =========================================================
+  // FORMAT DEADLINE
+  // =========================================================
+
+  const formatDeadline = (date) => {
+    if (!date) {
+      return 'No deadline'
+    }
+
+    const parsedDate =
+      new Date(date)
+
+    if (
+      Number.isNaN(
+        parsedDate.getTime()
+      )
+    ) {
+      return date
+    }
+
+    return parsedDate.toLocaleString(
+      undefined,
+      {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }
+    )
+  }
+
+  // =========================================================
+  // CONVERT API DATE TO DATETIME-LOCAL VALUE
+  // =========================================================
+
+  const toDatetimeLocalValue = (date) => {
+    if (!date) {
+      return ''
+    }
+
+    const parsedDate =
+      new Date(date)
+
+    if (
+      Number.isNaN(
+        parsedDate.getTime()
+      )
+    ) {
+      return ''
+    }
+
+    const year =
+      parsedDate.getFullYear()
+
+    const month =
+      String(
+        parsedDate.getMonth() + 1
+      ).padStart(2, '0')
+
+    const day =
+      String(
+        parsedDate.getDate()
+      ).padStart(2, '0')
+
+    const hours =
+      String(
+        parsedDate.getHours()
+      ).padStart(2, '0')
+
+    const minutes =
+      String(
+        parsedDate.getMinutes()
+      ).padStart(2, '0')
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+  }
+
+  // =========================================================
+  // START EDITING DEADLINE
+  // =========================================================
+
+  const handleEditDeadline = (
+    assignment
+  ) => {
+    setError('')
+    setSuccess('')
+
+    setEditingDeadline(
+      assignment.assignment_id
+    )
+
+    setEditingDeadlineValue(
+      toDatetimeLocalValue(
+        assignment.deadline
+      )
+    )
+  }
+
+  // =========================================================
+  // CANCEL DEADLINE EDIT
+  // =========================================================
+
+  const handleCancelDeadlineEdit = () => {
+    setEditingDeadline(null)
+    setEditingDeadlineValue('')
+    setError('')
+  }
+
+  // =========================================================
+  // SAVE DEADLINE
+  // =========================================================
+
+  const handleSaveDeadline = async (
+    assignment
+  ) => {
+    setError('')
+    setSuccess('')
+
+    // -------------------------------------------------------
+    // Allow removing the deadline.
+    // -------------------------------------------------------
+
+    if (!editingDeadlineValue) {
+      const confirmed =
+        window.confirm(
+          'Are you sure you want to remove this deadline?'
+        )
+
+      if (!confirmed) {
+        return
+      }
+    }
+
+    // -------------------------------------------------------
+    // Validate deadline.
+    // -------------------------------------------------------
+
+    if (editingDeadlineValue) {
+      const selectedDeadline =
+        new Date(
+          editingDeadlineValue
+        )
+
+      if (
+        Number.isNaN(
+          selectedDeadline.getTime()
+        )
+      ) {
+        setError(
+          'Please enter a valid deadline.'
+        )
+        return
+      }
+
+      if (
+        selectedDeadline.getTime() <=
+        Date.now()
+      ) {
+        setError(
+          'The deadline must be in the future.'
+        )
+        return
+      }
+    }
+
+    try {
+      setSavingDeadline(
+        assignment.assignment_id
+      )
+
+      const deadlineValue =
+        editingDeadlineValue
+          ? new Date(
+              editingDeadlineValue
+            ).toISOString()
+          : null
+
+      const response =
+        await apiFetch(
+          `/admin/course-assignments/${assignment.assignment_id}/deadline`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              deadline:
+                deadlineValue,
+            }),
+          },
+          handleSessionExpired
+        )
+
+      const data =
+        await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail ||
+            'Failed to update deadline'
+        )
+      }
+
+      // -----------------------------------------------------
+      // Update assignment in local state.
+      // -----------------------------------------------------
+
+      setAssignments(
+        (previousAssignments) =>
+          previousAssignments.map(
+            (item) =>
+              Number(
+                item.assignment_id
+              ) ===
+              Number(
+                assignment.assignment_id
+              )
+                ? {
+                    ...item,
+                    deadline:
+                      data.deadline,
+                  }
+                : item
+          )
+      )
+
+      setEditingDeadline(null)
+      setEditingDeadlineValue('')
+
+      setSuccess(
+        editingDeadlineValue
+          ? 'Course deadline updated successfully.'
+          : 'Course deadline removed successfully.'
+      )
+    } catch (err) {
+      if (
+        err.message ===
+        'Session expired. Please sign in again.'
+      ) {
+        return
+      }
+
+      setError(err.message)
+    } finally {
+      setSavingDeadline(null)
+    }
+  }
+
+  // =========================================================
+  // GET DEADLINE STATUS
+  // =========================================================
+
+  const getDeadlineStatus = (date) => {
+    if (!date) {
+      return {
+        label: 'No deadline',
+        type: 'none',
+      }
+    }
+
+    const deadlineDate =
+      new Date(date)
+
+    if (
+      Number.isNaN(
+        deadlineDate.getTime()
+      )
+    ) {
+      return {
+        label: 'Invalid deadline',
+        type: 'none',
+      }
+    }
+
+    const now = new Date()
+
+    const todayStart =
+      new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      )
+
+    const tomorrowStart =
+      new Date(todayStart)
+
+    tomorrowStart.setDate(
+      tomorrowStart.getDate() + 1
+    )
+
+    if (
+      deadlineDate.getTime() <
+      now.getTime()
+    ) {
+      return {
+        label: 'Overdue',
+        type: 'overdue',
+      }
+    }
+
+    if (
+      deadlineDate.getTime() <
+      tomorrowStart.getTime()
+    ) {
+      return {
+        label: 'Due today',
+        type: 'today',
+      }
+    }
+
+    const difference =
+      deadlineDate.getTime() -
+      todayStart.getTime()
+
+    const days = Math.ceil(
+      difference /
+        (1000 * 60 * 60 * 24)
+    )
+
+    return {
+      label:
+        days === 1
+          ? 'Due tomorrow'
+          : `Due in ${days} days`,
+      type: 'upcoming',
+    }
+  }
+
+  // =========================================================
+  // DEADLINE STATUS STYLE
+  // =========================================================
+
+  const getDeadlineStatusStyle = (
+    type
+  ) => {
+    if (type === 'overdue') {
+      return {
+        color: '#b00000',
+        fontWeight: '700',
+      }
+    }
+
+    if (type === 'today') {
+      return {
+        color: '#8a5200',
+        fontWeight: '700',
+      }
+    }
+
+    if (type === 'upcoming') {
+      return {
+        color: '#111',
+        fontWeight: '600',
+      }
+    }
+
+    return {
+      color: '#777',
+      fontWeight: '400',
+    }
   }
 
   // =========================================================
@@ -592,10 +1066,6 @@ function ManageLearners() {
           marginBottom: '40px',
         }}
       >
-        {/* -------------------------------------------------
-            SECTION HEADER
-        ------------------------------------------------- */}
-
         <div
           style={{
             display: 'flex',
@@ -626,19 +1096,11 @@ function ManageLearners() {
           </span>
         </div>
 
-        {/* -------------------------------------------------
-            LOADING
-        ------------------------------------------------- */}
-
         {loading && (
           <p>
             Loading learners...
           </p>
         )}
-
-        {/* -------------------------------------------------
-            EMPTY
-        ------------------------------------------------- */}
 
         {!loading &&
           learners.length === 0 && (
@@ -652,10 +1114,6 @@ function ManageLearners() {
               No learners found.
             </div>
           )}
-
-        {/* -------------------------------------------------
-            LEARNER LIST
-        ------------------------------------------------- */}
 
         {!loading &&
           learners.map(
@@ -696,10 +1154,6 @@ function ManageLearners() {
                       gap: '30px',
                     }}
                   >
-                    {/* ---------------------------------------
-                        LEARNER INFORMATION
-                    --------------------------------------- */}
-
                     <div>
                       <div
                         style={{
@@ -755,10 +1209,6 @@ function ManageLearners() {
                       </p>
                     </div>
 
-                    {/* ---------------------------------------
-                        LEARNER ACTIONS
-                    --------------------------------------- */}
-
                     <div
                       style={{
                         display:
@@ -770,8 +1220,6 @@ function ManageLearners() {
                           'flex-end',
                       }}
                     >
-                      {/* ACCESS */}
-
                       <button
                         type="button"
                         disabled={
@@ -798,8 +1246,6 @@ function ManageLearners() {
                           ? 'Deactivate Access'
                           : 'Activate Access'}
                       </button>
-
-                      {/* DELETE */}
 
                       <button
                         type="button"
@@ -870,42 +1316,228 @@ function ManageLearners() {
                       learnerCourses.map(
                         (
                           assignment
-                        ) => (
-                          <div
-                            key={
-                              assignment.assignment_id
-                            }
-                            style={{
-                              border:
-                                '1px solid #ddd',
-                              padding:
-                                '14px',
-                              marginBottom:
-                                '10px',
-                            }}
-                          >
-                            <strong>
-                              {
-                                assignment.course_title
-                              }
-                            </strong>
+                        ) => {
+                          const deadlineStatus =
+                            getDeadlineStatus(
+                              assignment.deadline
+                            )
 
-                            {assignment.course_description && (
-                              <p
+                          const isEditing =
+                            editingDeadline ===
+                            assignment.assignment_id
+
+                          const isSaving =
+                            savingDeadline ===
+                            assignment.assignment_id
+
+                          return (
+                            <div
+                              key={
+                                assignment.assignment_id
+                              }
+                              style={{
+                                border:
+                                  '1px solid #ddd',
+                                padding:
+                                  '16px',
+                                marginBottom:
+                                  '10px',
+                              }}
+                            >
+                              <div
                                 style={{
-                                  margin:
-                                    '6px 0 0',
-                                  color:
-                                    '#555',
+                                  display:
+                                    'flex',
+                                  justifyContent:
+                                    'space-between',
+                                  alignItems:
+                                    'flex-start',
+                                  gap:
+                                    '20px',
                                 }}
                               >
-                                {
-                                  assignment.course_description
-                                }
-                              </p>
-                            )}
-                          </div>
-                        )
+                                {/* ---------------------------------
+                                    COURSE INFORMATION
+                                --------------------------------- */}
+
+                                <div>
+                                  <strong>
+                                    {
+                                      assignment.course_title
+                                    }
+                                  </strong>
+
+                                  {assignment.course_description && (
+                                    <p
+                                      style={{
+                                        margin:
+                                          '6px 0 0',
+                                        color:
+                                          '#555',
+                                      }}
+                                    >
+                                      {
+                                        assignment.course_description
+                                      }
+                                    </p>
+                                  )}
+                                </div>
+
+                                {/* ---------------------------------
+                                    DEADLINE
+                                --------------------------------- */}
+
+                                <div
+                                  style={{
+                                    textAlign:
+                                      'right',
+                                    flexShrink:
+                                      0,
+                                    minWidth:
+                                      '260px',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize:
+                                        '11px',
+                                      letterSpacing:
+                                        '2px',
+                                      color:
+                                        '#666',
+                                      marginBottom:
+                                        '8px',
+                                    }}
+                                  >
+                                    DEADLINE
+                                  </div>
+
+                                  {isEditing ? (
+                                    <>
+                                      <input
+                                        type="datetime-local"
+                                        value={
+                                          editingDeadlineValue
+                                        }
+                                        onChange={(
+                                          event
+                                        ) =>
+                                          setEditingDeadlineValue(
+                                            event
+                                              .target
+                                              .value
+                                          )
+                                        }
+                                        style={{
+                                          ...inputStyle,
+                                          width:
+                                            '100%',
+                                          marginBottom:
+                                            '8px',
+                                        }}
+                                        disabled={
+                                          isSaving
+                                        }
+                                      />
+
+                                      <div
+                                        style={{
+                                          display:
+                                            'flex',
+                                          justifyContent:
+                                            'flex-end',
+                                          gap:
+                                            '8px',
+                                        }}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleSaveDeadline(
+                                              assignment
+                                            )
+                                          }
+                                          disabled={
+                                            isSaving
+                                          }
+                                          style={
+                                            primaryButtonStyle
+                                          }
+                                        >
+                                          {isSaving
+                                            ? 'Saving...'
+                                            : 'Save Deadline'}
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={
+                                            handleCancelDeadlineEdit
+                                          }
+                                          disabled={
+                                            isSaving
+                                          }
+                                          style={
+                                            secondarySmallButtonStyle
+                                          }
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div
+                                        style={{
+                                          fontSize:
+                                            '14px',
+                                          fontWeight:
+                                            '600',
+                                        }}
+                                      >
+                                        {formatDeadline(
+                                          assignment.deadline
+                                        )}
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          fontSize:
+                                            '13px',
+                                          marginTop:
+                                            '5px',
+                                          marginBottom:
+                                            '10px',
+                                          ...getDeadlineStatusStyle(
+                                            deadlineStatus.type
+                                          ),
+                                        }}
+                                      >
+                                        {
+                                          deadlineStatus.label
+                                        }
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleEditDeadline(
+                                            assignment
+                                          )
+                                        }
+                                        style={
+                                          secondarySmallButtonStyle
+                                        }
+                                      >
+                                        Edit Deadline
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        }
                       )
                     )}
                   </div>
@@ -1072,6 +1704,72 @@ function ManageLearners() {
                         </div>
 
                         {/* ---------------------------------
+                            DEADLINE
+                        --------------------------------- */}
+
+                        <div
+                          style={{
+                            marginBottom:
+                              '25px',
+                          }}
+                        >
+                          <label
+                            htmlFor={`deadline-${learner.id}`}
+                            style={{
+                              display:
+                                'block',
+                              fontWeight:
+                                '600',
+                              marginBottom:
+                                '8px',
+                            }}
+                          >
+                            Deadline
+                          </label>
+
+                          <input
+                            id={`deadline-${learner.id}`}
+                            type="datetime-local"
+                            value={
+                              deadline
+                            }
+                            onChange={(
+                              event
+                            ) =>
+                              setDeadline(
+                                event
+                                  .target
+                                  .value
+                              )
+                            }
+                            style={
+                              inputStyle
+                            }
+                            disabled={
+                              assigningCourse
+                            }
+                          />
+
+                          <p
+                            style={{
+                              margin:
+                                '8px 0 0',
+                              color:
+                                '#666',
+                              fontSize:
+                                '13px',
+                              lineHeight:
+                                '1.5',
+                            }}
+                          >
+                            Optional. Leave
+                            this empty if
+                            the course has
+                            no deadline.
+                          </p>
+                        </div>
+
+                        {/* ---------------------------------
                             ASSIGN BUTTON
                         --------------------------------- */}
 
@@ -1170,58 +1868,119 @@ function ManageLearners() {
                 (
                   assignment,
                   index
-                ) => (
-                  <div
-                    key={
-                      assignment.assignment_id
-                    }
-                    style={{
-                      padding:
-                        '18px 20px',
-                      borderBottom:
-                        index <
-                        assignments.length -
-                          1
-                          ? '1px solid #ddd'
-                          : 'none',
-                    }}
-                  >
+                ) => {
+                  const deadlineStatus =
+                    getDeadlineStatus(
+                      assignment.deadline
+                    )
+
+                  return (
                     <div
+                      key={
+                        assignment.assignment_id
+                      }
                       style={{
-                        fontWeight:
-                          '600',
-                        marginBottom:
-                          '6px',
+                        padding:
+                          '18px 20px',
+                        borderBottom:
+                          index <
+                          assignments.length -
+                            1
+                            ? '1px solid #ddd'
+                            : 'none',
                       }}
                     >
-                      {
-                        assignment.learner_name
-                      }
-                    </div>
+                      <div
+                        style={{
+                          fontWeight:
+                            '600',
+                          marginBottom:
+                            '6px',
+                        }}
+                      >
+                        {
+                          assignment.learner_name
+                        }
+                      </div>
 
-                    <div
-                      style={{
-                        color:
-                          '#555',
-                        marginBottom:
-                          '6px',
-                      }}
-                    >
-                      {
-                        assignment.learner_email
-                      }
-                    </div>
+                      <div
+                        style={{
+                          color:
+                            '#555',
+                          marginBottom:
+                            '6px',
+                        }}
+                      >
+                        {
+                          assignment.learner_email
+                        }
+                      </div>
 
-                    <div>
-                      <strong>
-                        Course:
-                      </strong>{' '}
-                      {
-                        assignment.course_title
-                      }
+                      <div
+                        style={{
+                          marginBottom:
+                            '10px',
+                        }}
+                      >
+                        <strong>
+                          Course:
+                        </strong>{' '}
+                        {
+                          assignment.course_title
+                        }
+                      </div>
+
+                      <div
+                        style={{
+                          display:
+                            'flex',
+                          gap:
+                            '10px',
+                          flexWrap:
+                            'wrap',
+                          alignItems:
+                            'center',
+                        }}
+                      >
+                        <strong>
+                          Deadline:
+                        </strong>
+
+                        <span>
+                          {formatDeadline(
+                            assignment.deadline
+                          )}
+                        </span>
+
+                        <span
+                          style={{
+                            ...getDeadlineStatusStyle(
+                              deadlineStatus.type
+                            ),
+                          }}
+                        >
+                          {
+                            deadlineStatus.label
+                          }
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleEditDeadline(
+                              assignment
+                            )
+                          }
+                          style={
+                            secondarySmallButtonStyle
+                          }
+                        >
+                          Edit Deadline
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )
+                  )
+                }
               )}
             </div>
           )}
@@ -1281,6 +2040,16 @@ const selectedButtonStyle = {
   fontWeight: '600',
   cursor: 'pointer',
   marginTop: '20px',
+}
+
+const secondarySmallButtonStyle = {
+  background: '#fff',
+  color: '#111',
+  border: '1px solid #111',
+  padding: '8px 12px',
+  fontSize: '13px',
+  fontWeight: '600',
+  cursor: 'pointer',
 }
 
 const dangerButtonStyle = {
