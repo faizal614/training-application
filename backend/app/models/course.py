@@ -26,6 +26,16 @@ class Course(Base):
         nullable=True,
     )
 
+    # =========================================================
+    # COURSE CATEGORY
+    # =========================================================
+
+    category: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        default="General",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
@@ -44,5 +54,5 @@ class Course(Base):
     )
 
     assignments: Mapped[list["CourseAssignment"]] = relationship(
-    back_populates="course",
-)
+        back_populates="course",
+    )

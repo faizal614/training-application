@@ -15,6 +15,7 @@ function ManageCourses() {
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [category, setCategory] = useState('General')
 
   const [editingCourseId, setEditingCourseId] =
     useState(null)
@@ -25,6 +26,20 @@ function ManageCourses() {
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  // =========================================================
+  // COURSE CATEGORIES
+  // =========================================================
+
+  const COURSE_CATEGORIES = [
+    'Programming',
+    'Data Science',
+    'Business',
+    'Communication',
+    'Leadership',
+    'Cybersecurity',
+    'General',
+  ]
 
   // =========================================================
   // LOAD COURSES
@@ -87,6 +102,7 @@ function ManageCourses() {
   const resetForm = () => {
     setTitle('')
     setDescription('')
+    setCategory('General')
     setEditingCourseId(null)
   }
 
@@ -129,6 +145,7 @@ function ManageCourses() {
           body: JSON.stringify({
             title: title.trim(),
             description: description.trim(),
+            category: category.trim() || 'General',
           }),
         },
         handleSessionExpired
@@ -186,6 +203,9 @@ function ManageCourses() {
     setTitle(course.title || '')
     setDescription(
       course.description || ''
+    )
+    setCategory(
+      course.category || 'General'
     )
 
     window.scrollTo({
@@ -375,6 +395,45 @@ function ManageCourses() {
             rows="5"
           />
 
+          {/* CATEGORY */}
+
+          <label htmlFor="course-category">
+            Category
+          </label>
+
+          <select
+            id="course-category"
+            value={category}
+            onChange={(event) =>
+              setCategory(event.target.value)
+            }
+            disabled={saving}
+            style={{
+              width: '100%',
+              padding: '14px 12px',
+              marginBottom: '12px',
+              boxSizing: 'border-box',
+              border: '1px solid #111111',
+              borderRadius: '0',
+              background: '#ffffff',
+              color: '#111111',
+              fontFamily: 'inherit',
+              fontSize: '15px',
+              outline: 'none',
+            }}
+          >
+            {COURSE_CATEGORIES.map(
+              (courseCategory) => (
+                <option
+                  key={courseCategory}
+                  value={courseCategory}
+                >
+                  {courseCategory}
+                </option>
+              )
+            )}
+          </select>
+
           {/* BUTTONS */}
 
           <button
@@ -434,6 +493,25 @@ function ManageCourses() {
                 <h3>
                   {course.title}
                 </h3>
+
+                {/* CATEGORY */}
+
+                <p
+                  style={{
+                    margin:
+                      '0 0 16px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    letterSpacing: '1px',
+                    textTransform:
+                      'uppercase',
+                    color: '#555',
+                  }}
+                >
+                  Category:{' '}
+                  {course.category ||
+                    'General'}
+                </p>
 
                 <p>
                   {course.description ||

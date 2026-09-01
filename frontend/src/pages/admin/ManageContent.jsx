@@ -575,7 +575,7 @@ function TrainingContent() {
       style={{
         maxWidth: '1200px',
         margin: '0 auto',
-        padding: '48px 28px 80px',
+        padding: '132px 28px 80px',
         fontFamily: 'Arial, sans-serif',
         color: '#111',
       }}

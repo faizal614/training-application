@@ -497,7 +497,7 @@ function ManageLearners() {
       style={{
         maxWidth: '1140px',
         margin: '0 auto',
-        padding: '40px 0 80px',
+        padding: '112px 0 80px',
       }}
     >
       {/* ===================================================

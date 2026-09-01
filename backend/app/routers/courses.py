@@ -15,7 +15,10 @@ from backend.app.models.quiz import Quiz
 from backend.app.models.quiz_attempt import QuizAttempt
 from backend.app.models.user import User, UserRole
 
-from backend.app.schemas.course import CourseCreate, CourseResponse
+from backend.app.schemas.course import (
+    CourseCreate,
+    CourseResponse,
+)
 
 
 router = APIRouter(
@@ -37,9 +40,27 @@ def create_course(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    # -----------------------------------------------------
+    # NORMALIZE CATEGORY
+    # -----------------------------------------------------
+
+    category = (
+        course_data.category.strip()
+        if course_data.category
+        else "General"
+    )
+
+    if not category:
+        category = "General"
+
+    # -----------------------------------------------------
+    # CREATE COURSE
+    # -----------------------------------------------------
+
     course = Course(
         title=course_data.title,
         description=course_data.description,
+        category=category,
     )
 
     db.add(course)
@@ -90,6 +111,7 @@ def get_my_enrolled_courses(
             "course_id": assignment.course.id,
             "title": assignment.course.title,
             "description": assignment.course.description,
+            "category": assignment.course.category,
             "assigned_at": assignment.assigned_at,
         }
         for assignment in assignments
@@ -110,7 +132,9 @@ def get_course(
 ):
     course = (
         db.query(Course)
-        .filter(Course.id == course_id)
+        .filter(
+            Course.id == course_id
+        )
         .first()
     )
 
@@ -119,6 +143,65 @@ def get_course(
             status_code=404,
             detail="Course not found",
         )
+
+    return course
+
+
+# =========================================================
+# UPDATE COURSE
+# =========================================================
+
+@router.put(
+    "/{course_id}",
+    response_model=CourseResponse,
+)
+def update_course(
+    course_id: int,
+    course_data: CourseCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    # -----------------------------------------------------
+    # FIND COURSE
+    # -----------------------------------------------------
+
+    course = (
+        db.query(Course)
+        .filter(
+            Course.id == course_id
+        )
+        .first()
+    )
+
+    if course is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Course not found",
+        )
+
+    # -----------------------------------------------------
+    # NORMALIZE CATEGORY
+    # -----------------------------------------------------
+
+    category = (
+        course_data.category.strip()
+        if course_data.category
+        else "General"
+    )
+
+    if not category:
+        category = "General"
+
+    # -----------------------------------------------------
+    # UPDATE COURSE
+    # -----------------------------------------------------
+
+    course.title = course_data.title
+    course.description = course_data.description
+    course.category = category
+
+    db.commit()
+    db.refresh(course)
 
     return course
 
@@ -141,7 +224,9 @@ def enroll_in_course(
 
     course = (
         db.query(Course)
-        .filter(Course.id == course_id)
+        .filter(
+            Course.id == course_id
+        )
         .first()
     )
 
@@ -195,7 +280,9 @@ def get_course_progress(
 ):
     course = (
         db.query(Course)
-        .filter(Course.id == course_id)
+        .filter(
+            Course.id == course_id
+        )
         .first()
     )
 
@@ -209,12 +296,19 @@ def get_course_progress(
 
     modules = (
         db.query(Module)
-        .filter(Module.course_id == course_id)
-        .order_by(Module.display_order)
+        .filter(
+            Module.course_id == course_id
+        )
+        .order_by(
+            Module.display_order
+        )
         .all()
     )
 
-    module_ids = [module.id for module in modules]
+    module_ids = [
+        module.id
+        for module in modules
+    ]
 
     if module_ids:
         progress_records = (
@@ -237,14 +331,22 @@ def get_course_progress(
     module_progress = []
 
     for module in modules:
-        progress = progress_by_module.get(module.id)
+
+        progress = progress_by_module.get(
+            module.id
+        )
 
         if progress is not None:
-            module_status = progress.status.value
+
+            module_status = (
+                progress.status.value
+            )
 
             if progress.status.value == "completed":
                 completed_modules += 1
+
         else:
+
             module_status = "pending"
 
         module_progress.append(
@@ -258,10 +360,14 @@ def get_course_progress(
     total_modules = len(modules)
 
     if total_modules == 0:
+
         progress_percentage = 0
+
     else:
+
         progress_percentage = (
-            completed_modules / total_modules
+            completed_modules
+            / total_modules
         ) * 100
 
     return {
@@ -269,8 +375,13 @@ def get_course_progress(
         "user_id": user_id,
         "total_modules": total_modules,
         "completed_modules": completed_modules,
-        "pending_modules": total_modules - completed_modules,
-        "progress_percentage": progress_percentage,
+        "pending_modules": (
+            total_modules
+            - completed_modules
+        ),
+        "progress_percentage": (
+            progress_percentage
+        ),
         "modules": module_progress,
     }
 
@@ -306,7 +417,9 @@ def delete_course(
 
     course = (
         db.query(Course)
-        .filter(Course.id == course_id)
+        .filter(
+            Course.id == course_id
+        )
         .first()
     )
 
@@ -317,6 +430,7 @@ def delete_course(
         )
 
     try:
+
         # =================================================
         # 1. DELETE COURSE ASSIGNMENTS
         # =================================================
@@ -333,7 +447,9 @@ def delete_course(
 
         modules = (
             db.query(Module)
-            .filter(Module.course_id == course_id)
+            .filter(
+                Module.course_id == course_id
+            )
             .all()
         )
 
@@ -353,7 +469,9 @@ def delete_course(
             # ---------------------------------------------
 
             db.query(ModuleProgress).filter(
-                ModuleProgress.module_id.in_(module_ids)
+                ModuleProgress.module_id.in_(
+                    module_ids
+                )
             ).delete(
                 synchronize_session=False
             )
@@ -365,7 +483,9 @@ def delete_course(
             quizzes = (
                 db.query(Quiz)
                 .filter(
-                    Quiz.module_id.in_(module_ids)
+                    Quiz.module_id.in_(
+                        module_ids
+                    )
                 )
                 .all()
             )
@@ -386,7 +506,9 @@ def delete_course(
                 # =========================================
 
                 db.query(QuizAttempt).filter(
-                    QuizAttempt.quiz_id.in_(quiz_ids)
+                    QuizAttempt.quiz_id.in_(
+                        quiz_ids
+                    )
                 ).delete(
                     synchronize_session=False
                 )
@@ -418,7 +540,9 @@ def delete_course(
                 # =========================================
 
                 db.query(Question).filter(
-                    Question.quiz_id.in_(quiz_ids)
+                    Question.quiz_id.in_(
+                        quiz_ids
+                    )
                 ).delete(
                     synchronize_session=False
                 )
@@ -428,7 +552,9 @@ def delete_course(
                 # =========================================
 
                 db.query(Quiz).filter(
-                    Quiz.id.in_(quiz_ids)
+                    Quiz.id.in_(
+                        quiz_ids
+                    )
                 ).delete(
                     synchronize_session=False
                 )
@@ -438,7 +564,9 @@ def delete_course(
             # ---------------------------------------------
 
             db.query(Module).filter(
-                Module.id.in_(module_ids)
+                Module.id.in_(
+                    module_ids
+                )
             ).delete(
                 synchronize_session=False
             )
@@ -456,11 +584,15 @@ def delete_course(
         db.commit()
 
     except Exception:
+
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail="Unable to delete course and its related data",
+            detail=(
+                "Unable to delete course "
+                "and its related data"
+            ),
         )
 
     return {

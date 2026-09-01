@@ -1,4 +1,10 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom'
 
 import Header from './components/Header'
 
@@ -21,20 +27,54 @@ import InstructorCourses from './pages/admin/InstructorCourses'
 import InstructorAccess from './pages/admin/InstructorAccess'
 import ManageCourses from './pages/admin/ManageCourses'
 import ManageModules from './pages/admin/ManageModules'
-import ManageContent from "./pages/admin/ManageContent";
+import ManageContent from './pages/admin/ManageContent'
 import ManageQuiz from './pages/admin/ManageQuiz'
 import ManageLearners from './pages/admin/ManageLearners'
 import Progress from './pages/admin/Progress'
 import Certificates from './pages/admin/Certificates'
+
 import InstructorDashboard from './pages/instructor/InstructorDashboard'
 import ManageCourse from './pages/instructor/ManageCourse'
 
 import './App.css'
 
+
+// =========================================================
+// SCROLL TO TOP ON EVERY ROUTE CHANGE
+// =========================================================
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'auto',
+    })
+  }, [pathname])
+
+  return null
+}
+
+
+// =========================================================
+// APP
+// =========================================================
+
 function App() {
   return (
     <div className="app">
+
+      {/* Scroll page to top whenever route changes */}
+      <ScrollToTop />
+
+      {/* Header */}
       <Header />
+
+      {/* ===================================================
+          ROUTES
+      =================================================== */}
 
       <Routes>
 
@@ -52,6 +92,7 @@ function App() {
           }
         />
 
+
         {/* =====================================================
             AUTHENTICATION
         ===================================================== */}
@@ -65,6 +106,7 @@ function App() {
           path="/signup"
           element={<SignUp />}
         />
+
 
         {/* =====================================================
             LEARNER - COURSES
@@ -80,6 +122,7 @@ function App() {
           element={<CourseDetails />}
         />
 
+
         {/* =====================================================
             LEARNER - MODULES
         ===================================================== */}
@@ -93,6 +136,7 @@ function App() {
           path="/courses/:courseId/modules/:moduleId"
           element={<ModulePage />}
         />
+
 
         {/* =====================================================
             LEARNER - QUIZ
@@ -108,6 +152,7 @@ function App() {
           element={<QuizPage />}
         />
 
+
         {/* =====================================================
             LEARNER - CERTIFICATES
         ===================================================== */}
@@ -122,6 +167,7 @@ function App() {
           element={<CertificatePage />}
         />
 
+
         {/* =====================================================
             ADMIN DASHBOARD
         ===================================================== */}
@@ -130,6 +176,7 @@ function App() {
           path="/admin"
           element={<AdminDashboard />}
         />
+
 
         {/* =====================================================
             ADMIN - INSTRUCTOR MANAGEMENT
@@ -165,49 +212,98 @@ function App() {
           element={<InstructorAccess />}
         />
 
+
+        {/* =====================================================
+            ADMIN - COURSES
+        ===================================================== */}
+
         <Route
           path="/admin/courses"
           element={<ManageCourses />}
         />
+
+
+        {/* =====================================================
+            ADMIN - MODULES
+        ===================================================== */}
 
         <Route
           path="/admin/modules"
           element={<ManageModules />}
         />
 
+
+        {/* =====================================================
+            ADMIN - CONTENT
+        ===================================================== */}
+
         <Route
           path="/admin/content"
           element={<ManageContent />}
         />
+
+
+        {/* =====================================================
+            ADMIN - QUIZZES
+        ===================================================== */}
 
         <Route
           path="/admin/quizzes"
           element={<ManageQuiz />}
         />
 
-        <Route
-  path="/admin/learners"
-  element={<ManageLearners />}
-/>
-<Route
-  path="/admin/progress"
-  element={<Progress />}
-/>
-<Route
-  path="/admin/certificates"
-  element={<Certificates />}
-/>
-<Route
-  path="/instructor"
-  element={<InstructorDashboard />}
-/>
-<Route
-  path="/instructor/course/:courseId"
-  element={<ManageCourse />}
-/>
 
+        {/* =====================================================
+            ADMIN - LEARNERS
+        ===================================================== */}
+
+        <Route
+          path="/admin/learners"
+          element={<ManageLearners />}
+        />
+
+
+        {/* =====================================================
+            ADMIN - PROGRESS
+        ===================================================== */}
+
+        <Route
+          path="/admin/progress"
+          element={<Progress />}
+        />
+
+
+        {/* =====================================================
+            ADMIN - CERTIFICATES
+        ===================================================== */}
+
+        <Route
+          path="/admin/certificates"
+          element={<Certificates />}
+        />
+
+
+        {/* =====================================================
+            INSTRUCTOR DASHBOARD
+        ===================================================== */}
+
+        <Route
+          path="/instructor"
+          element={<InstructorDashboard />}
+        />
+
+
+        {/* =====================================================
+            INSTRUCTOR - MANAGE COURSE
+        ===================================================== */}
+
+        <Route
+          path="/instructor/course/:courseId"
+          element={<ManageCourse />}
+        />
 
       </Routes>
+
     </div>
   )
 }
