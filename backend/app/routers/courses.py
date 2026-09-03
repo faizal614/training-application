@@ -1,13 +1,14 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.app.auth.authorization import require_admin
 from backend.app.auth.dependencies import get_current_user
 from backend.app.database import get_db
 
+from backend.app.models.answer import Answer
+from backend.app.models.certificate import Certificate
 from backend.app.models.course import Course
 from backend.app.models.course_assignment import CourseAssignment
 from backend.app.models.module import Module
@@ -15,6 +16,7 @@ from backend.app.models.module_progress import ModuleProgress
 from backend.app.models.question import Question
 from backend.app.models.quiz import Quiz
 from backend.app.models.quiz_attempt import QuizAttempt
+from backend.app.models.training_content import TrainingContent
 from backend.app.models.user import User, UserRole
 
 from backend.app.schemas.course import (
@@ -126,13 +128,6 @@ def get_my_enrolled_courses(
     # -----------------------------------------------------
     # GET ALL COURSES
     # -----------------------------------------------------
-    #
-    # Do NOT filter courses by user_id here.
-    #
-    # This is what allows Google SSO users and local users
-    # to see the complete course catalogue.
-    #
-    # -----------------------------------------------------
 
     courses = (
         db.query(Course)
@@ -142,11 +137,6 @@ def get_my_enrolled_courses(
 
     # -----------------------------------------------------
     # GET CURRENT USER'S ASSIGNMENTS
-    # -----------------------------------------------------
-    #
-    # We fetch assignments separately so that courses
-    # without an assignment are still returned.
-    #
     # -----------------------------------------------------
 
     assignments = (
@@ -217,7 +207,6 @@ def get_my_enrolled_courses(
                 .filter(
                     ModuleProgress.user_id
                     == current_user.id,
-
                     ModuleProgress.module_id.in_(
                         module_ids
                     ),
@@ -295,10 +284,6 @@ def get_my_enrolled_courses(
 
         # =================================================
         # COURSE COMPLETION
-        # =================================================
-        #
-        # A course with zero modules is NOT completed.
-        #
         # =================================================
 
         completed = (
@@ -740,18 +725,33 @@ def get_course_progress(
 # DELETE COURSE
 # =========================================================
 #
+# Delete all course-related records before deleting the
+# course itself.
+#
 # Deletion order:
 #
+# Certificate
+#      ↓
+# Course Assignments
+#      ↓
+# Module Progress
+#      ↓
+# Training Content
+#      ↓
+# Quiz Attempts
+#      ↓
+# Answers
+#      ↓
+# Questions
+#      ↓
+# Quizzes
+#      ↓
+# Modules
+#      ↓
 # Course
-#   ├── Course Assignments
-#   └── Modules
-#        ├── Module Progress
-#        └── Quiz
-#             ├── Quiz Attempts
-#             └── Questions
-#                  └── Answers
 #
-# Delete children first, then parent.
+# Children must be deleted before their parent records
+# because of PostgreSQL foreign-key constraints.
 #
 # =========================================================
 
@@ -782,7 +782,25 @@ def delete_course(
     try:
 
         # =================================================
-        # 1. DELETE COURSE ASSIGNMENTS
+        # 1. DELETE CERTIFICATES
+        # =================================================
+        #
+        # Certificates reference the course.
+        #
+        # =================================================
+
+        db.query(Certificate).filter(
+            Certificate.course_id == course_id
+        ).delete(
+            synchronize_session=False
+        )
+
+        # =================================================
+        # 2. DELETE COURSE ASSIGNMENTS
+        # =================================================
+        #
+        # Assignments reference the course.
+        #
         # =================================================
 
         db.query(CourseAssignment).filter(
@@ -792,7 +810,7 @@ def delete_course(
         )
 
         # =================================================
-        # 2. GET ALL MODULES
+        # 3. GET ALL MODULES
         # =================================================
 
         modules = (
@@ -809,7 +827,7 @@ def delete_course(
         ]
 
         # =================================================
-        # 3. DELETE MODULE-RELATED DATA
+        # 4. DELETE MODULE-RELATED DATA
         # =================================================
 
         if module_ids:
@@ -820,6 +838,26 @@ def delete_course(
 
             db.query(ModuleProgress).filter(
                 ModuleProgress.module_id.in_(
+                    module_ids
+                )
+            ).delete(
+                synchronize_session=False
+            )
+
+            # ---------------------------------------------
+            # DELETE TRAINING CONTENT
+            # ---------------------------------------------
+            #
+            # training_contents.module_id references
+            # modules.id.
+            #
+            # Therefore training contents MUST be deleted
+            # before the modules themselves.
+            #
+            # ---------------------------------------------
+
+            db.query(TrainingContent).filter(
+                TrainingContent.module_id.in_(
                     module_ids
                 )
             ).delete(
@@ -846,13 +884,17 @@ def delete_course(
             ]
 
             # ---------------------------------------------
-            # DELETE QUIZ DATA
+            # DELETE QUIZ-RELATED DATA
             # ---------------------------------------------
 
             if quiz_ids:
 
                 # =========================================
                 # DELETE QUIZ ATTEMPTS
+                # =========================================
+                #
+                # QuizAttempt references Quiz.
+                #
                 # =========================================
 
                 db.query(QuizAttempt).filter(
@@ -864,24 +906,41 @@ def delete_course(
                 )
 
                 # =========================================
-                # DELETE ANSWERS
+                # GET QUESTIONS
                 # =========================================
 
-                db.execute(
-                    text(
-                        """
-                        DELETE FROM answers
-                        WHERE question_id IN (
-                            SELECT id
-                            FROM questions
-                            WHERE quiz_id = ANY(:quiz_ids)
+                questions = (
+                    db.query(Question)
+                    .filter(
+                        Question.quiz_id.in_(
+                            quiz_ids
                         )
-                        """
-                    ),
-                    {
-                        "quiz_ids": quiz_ids,
-                    },
+                    )
+                    .all()
                 )
+
+                question_ids = [
+                    question.id
+                    for question in questions
+                ]
+
+                # =========================================
+                # DELETE ANSWERS
+                # =========================================
+                #
+                # Answer references Question.
+                #
+                # =========================================
+
+                if question_ids:
+
+                    db.query(Answer).filter(
+                        Answer.question_id.in_(
+                            question_ids
+                        )
+                    ).delete(
+                        synchronize_session=False
+                    )
 
                 # =========================================
                 # DELETE QUESTIONS
@@ -907,9 +966,9 @@ def delete_course(
                     synchronize_session=False
                 )
 
-            # ---------------------------------------------
+            # =================================================
             # DELETE MODULES
-            # ---------------------------------------------
+            # =================================================
 
             db.query(Module).filter(
                 Module.id.in_(
@@ -920,20 +979,33 @@ def delete_course(
             )
 
         # =================================================
-        # 4. DELETE COURSE
+        # 5. DELETE COURSE
         # =================================================
 
         db.delete(course)
 
         # =================================================
-        # 5. COMMIT
+        # 6. COMMIT EVERYTHING
         # =================================================
 
         db.commit()
 
-    except Exception:
+    except Exception as error:
+
+        # -------------------------------------------------
+        # ROLLBACK EVERYTHING
+        # -------------------------------------------------
 
         db.rollback()
+
+        # -------------------------------------------------
+        # PRINT THE REAL DATABASE ERROR
+        # -------------------------------------------------
+
+        print(
+            f"Failed to delete course "
+            f"{course_id}: {error}"
+        )
 
         raise HTTPException(
             status_code=500,
@@ -945,7 +1017,6 @@ def delete_course(
 
     return {
         "message": "Course deleted successfully",
-
         "course_id": course_id,
     }
 

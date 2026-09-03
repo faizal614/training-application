@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import {
+  EditorContent,
+  useEditor,
+} from '@tiptap/react'
+
+import StarterKit from '@tiptap/starter-kit'
+import LinkExtension from '@tiptap/extension-link'
+import Placeholder from '@tiptap/extension-placeholder'
+
 import { apiFetch } from '../../utils/api'
 import { useAuth } from '../../context/AuthContext'
 
@@ -25,7 +34,6 @@ function TrainingContent() {
   // FORM STATE
   // =========================================================
 
-  const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [contentType, setContentType] = useState('text')
   const [body, setBody] = useState('')
@@ -36,19 +44,73 @@ function TrainingContent() {
   // EDIT STATE
   // =========================================================
 
-  const [editingContentId, setEditingContentId] = useState(null)
+  const [editingContentId, setEditingContentId] =
+    useState(null)
 
-  const isEditing = editingContentId !== null
+  const isEditing =
+    editingContentId !== null
+
+  const hasExistingContent =
+    contents.length > 0
 
   // =========================================================
   // LOADING / MESSAGE STATE
   // =========================================================
 
   const [loading, setLoading] = useState(false)
-  const [contentLoading, setContentLoading] = useState(false)
+  const [contentLoading, setContentLoading] =
+    useState(false)
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  // =========================================================
+  // TIPTAP EDITOR
+  // =========================================================
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: {
+          levels: [1, 2, 3],
+        },
+      }),
+
+      LinkExtension.configure({
+        openOnClick: false,
+        autolink: true,
+        defaultProtocol: 'https',
+      }),
+
+      Placeholder.configure({
+        placeholder:
+          'Write your training content here...',
+      }),
+    ],
+
+    content: '',
+
+    onUpdate: ({ editor }) => {
+      setBody(editor.getHTML())
+    },
+  })
+
+  // =========================================================
+  // UPDATE EDITOR CONTENT
+  // =========================================================
+
+  const setEditorContent = (content) => {
+    if (!editor) {
+      return
+    }
+
+    editor.commands.setContent(
+      content || '',
+      false
+    )
+
+    setBody(content || '')
+  }
 
   // =========================================================
   // FETCH COURSES
@@ -193,7 +255,11 @@ function TrainingContent() {
         )
       }
 
-      setContents(data)
+      setContents(
+        Array.isArray(data)
+          ? data
+          : []
+      )
     } catch (err) {
       console.error(err)
 
@@ -218,7 +284,6 @@ function TrainingContent() {
   // =========================================================
 
   const resetForm = () => {
-    setTitle('')
     setDescription('')
     setContentType('text')
     setBody('')
@@ -226,6 +291,10 @@ function TrainingContent() {
     setDisplayOrder(1)
 
     setEditingContentId(null)
+
+    if (editor) {
+      editor.commands.clearContent()
+    }
   }
 
   // =========================================================
@@ -238,33 +307,53 @@ function TrainingContent() {
 
     setEditingContentId(content.id)
 
-    // Load existing title
-    setTitle(content.title || '')
+    // -------------------------------------------------------
+    // LOAD DESCRIPTION
+    // -------------------------------------------------------
 
-    // Load existing description
-    setDescription(content.description || '')
+    setDescription(
+      content.description || ''
+    )
 
-    // Load existing content type
+    // -------------------------------------------------------
+    // LOAD CONTENT TYPE
+    // -------------------------------------------------------
+
     setContentType(
       content.content_type || 'text'
     )
 
-    // Load existing video URL
+    // -------------------------------------------------------
+    // LOAD VIDEO URL
+    // -------------------------------------------------------
+
     setVideoUrl(
       content.video_url || ''
     )
 
-    // Load existing text body
-    setBody(
-      content.body || ''
-    )
+    // -------------------------------------------------------
+    // LOAD BODY
+    // -------------------------------------------------------
 
-    // Load existing display order
+    const existingBody =
+      content.body || ''
+
+    setBody(existingBody)
+
+    setEditorContent(existingBody)
+
+    // -------------------------------------------------------
+    // LOAD DISPLAY ORDER
+    // -------------------------------------------------------
+
     setDisplayOrder(
       content.display_order || 1
     )
 
-    // Scroll to the form
+    // -------------------------------------------------------
+    // SCROLL TO FORM
+    // -------------------------------------------------------
+
     window.scrollTo({
       top: 0,
       behavior: 'smooth',
@@ -310,29 +399,59 @@ function TrainingContent() {
     }
 
     // -------------------------------------------------------
-    // VALIDATE TITLE
+    // ONLY ONE CONTENT PER MODULE
     // -------------------------------------------------------
 
-    if (!title.trim()) {
+    if (
+      !isEditing &&
+      hasExistingContent
+    ) {
       setError(
-        'Please enter a content title.'
+        'This module already has training content. Please edit or delete the existing content.'
       )
       return
     }
 
     // -------------------------------------------------------
-    // VALIDATE CONTENT
+    // VALIDATE DESCRIPTION
+    // -------------------------------------------------------
+
+    if (!description.trim()) {
+      setError(
+        'Please enter a content description.'
+      )
+      return
+    }
+
+    // -------------------------------------------------------
+    // GET FINAL EDITOR TEXT
+    // -------------------------------------------------------
+
+    const editorText =
+      editor?.getText().trim() || ''
+
+    // -------------------------------------------------------
+    // VALIDATE TEXT CONTENT
+    //
+    // Text content requires theory/content.
     // -------------------------------------------------------
 
     if (
       contentType === 'text' &&
-      !body.trim()
+      !editorText
     ) {
       setError(
         'Text content requires training content.'
       )
       return
     }
+
+    // -------------------------------------------------------
+    // VALIDATE VIDEO CONTENT
+    //
+    // Video requires a URL.
+    // Theory/content is optional.
+    // -------------------------------------------------------
 
     if (
       contentType === 'video' &&
@@ -349,27 +468,62 @@ function TrainingContent() {
       setError('')
       setSuccess('')
 
+      // -------------------------------------------------------
+      // GET FINAL EDITOR HTML
+      // -------------------------------------------------------
+
+      const editorHtml =
+        editor?.getHTML() || body
+
+      // -------------------------------------------------------
+      // GET SELECTED MODULE
+      // -------------------------------------------------------
+
+      const selectedModuleData =
+        modules.find(
+          (module) =>
+            String(module.id) ===
+            String(selectedModule)
+        )
+
+      const moduleTitle =
+        selectedModuleData?.title ||
+        selectedModuleData?.name ||
+        `Module ${selectedModule}`
+
       // =====================================================
-      // IMPORTANT
-      // TITLE + DESCRIPTION ARE NOW INCLUDED
+      // PAYLOAD
       // =====================================================
 
       const payload = {
-        title: title.trim(),
+        // Module name is automatically
+        // used as the content title.
+        title: moduleTitle,
 
         description:
-          description.trim() || null,
+          description.trim(),
 
-        content_type: contentType,
+        content_type:
+          contentType,
 
         video_url:
           contentType === 'video'
             ? videoUrl.trim()
             : null,
 
+        // ---------------------------------------------------
+        // IMPORTANT:
+        //
+        // Text -> body required
+        // Video -> body optional
+        //
+        // This allows a video to have
+        // supporting theory as well.
+        // ---------------------------------------------------
+
         body:
-          contentType === 'text'
-            ? body.trim()
+          editorText
+            ? editorHtml
             : null,
 
         display_order:
@@ -381,18 +535,21 @@ function TrainingContent() {
       // =====================================================
 
       if (isEditing) {
-        const response = await apiFetch(
-          `/modules/content/${editingContentId}`,
-          {
-            method: 'PUT',
-            headers: {
-              'Content-Type':
-                'application/json',
+        const response =
+          await apiFetch(
+            `/modules/content/${editingContentId}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+              body: JSON.stringify(
+                payload
+              ),
             },
-            body: JSON.stringify(payload),
-          },
-          handleSessionExpired
-        )
+            handleSessionExpired
+          )
 
         const data =
           await response.json()
@@ -421,18 +578,21 @@ function TrainingContent() {
       // CREATE NEW CONTENT
       // =====================================================
 
-      const response = await apiFetch(
-        `/modules/${selectedModule}/content`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
+      const response =
+        await apiFetch(
+          `/modules/${selectedModule}/content`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify(
+              payload
+            ),
           },
-          body: JSON.stringify(payload),
-        },
-        handleSessionExpired
-      )
+          handleSessionExpired
+        )
 
       const data =
         await response.json()
@@ -494,13 +654,14 @@ function TrainingContent() {
       setError('')
       setSuccess('')
 
-      const response = await apiFetch(
-        `/modules/content/${contentId}`,
-        {
-          method: 'DELETE',
-        },
-        handleSessionExpired
-      )
+      const response =
+        await apiFetch(
+          `/modules/content/${contentId}`,
+          {
+            method: 'DELETE',
+          },
+          handleSessionExpired
+        )
 
       const data =
         await response.json()
@@ -567,6 +728,41 @@ function TrainingContent() {
   }
 
   // =========================================================
+  // TOOLBAR BUTTON
+  // =========================================================
+
+  const ToolbarButton = ({
+    onClick,
+    active = false,
+    children,
+    title,
+  }) => {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title={title}
+        style={{
+          border: '1px solid #ccc',
+          background: active
+            ? '#111'
+            : '#fff',
+          color: active
+            ? '#fff'
+            : '#111',
+          padding: '8px 12px',
+          fontSize: '14px',
+          fontWeight: '600',
+          cursor: 'pointer',
+          minWidth: '42px',
+        }}
+      >
+        {children}
+      </button>
+    )
+  }
+
+  // =========================================================
   // MAIN UI
   // =========================================================
 
@@ -619,8 +815,8 @@ function TrainingContent() {
             margin: 0,
           }}
         >
-          Add and manage text and video training
-          content.
+          Add and manage text and video
+          training content.
         </p>
       </div>
 
@@ -670,6 +866,7 @@ function TrainingContent() {
           marginBottom: '40px',
         }}
       >
+
         <h2
           style={{
             fontFamily: 'Georgia, serif',
@@ -682,6 +879,30 @@ function TrainingContent() {
             ? 'Edit Training Content'
             : 'Add Training Content'}
         </h2>
+
+        {/* ===================================================
+            ONE CONTENT NOTICE
+        =================================================== */}
+
+        {hasExistingContent &&
+          !isEditing && (
+            <div
+              style={{
+                border: '1px solid #222',
+                background: '#f7f7f7',
+                padding: '16px',
+                marginBottom: '25px',
+                lineHeight: '1.6',
+              }}
+            >
+              This module already has
+              training content. Each module
+              can contain only one training
+              content item. Use the
+              <strong> Edit </strong>
+              button below to modify it.
+            </div>
+          )}
 
         <form onSubmit={handleSubmit}>
 
@@ -767,36 +988,6 @@ function TrainingContent() {
           </div>
 
           {/* =================================================
-              TITLE
-          ================================================== */}
-
-          <div
-            style={{
-              marginBottom: '20px',
-            }}
-          >
-            <label
-              style={{
-                display: 'block',
-                fontWeight: '600',
-                marginBottom: '8px',
-              }}
-            >
-              Title
-            </label>
-
-            <input
-              type="text"
-              value={title}
-              onChange={(event) =>
-                setTitle(event.target.value)
-              }
-              placeholder="Enter content title"
-              style={inputStyle}
-            />
-          </div>
-
-          {/* =================================================
               DESCRIPTION
           ================================================== */}
 
@@ -818,7 +1009,9 @@ function TrainingContent() {
             <textarea
               value={description}
               onChange={(event) =>
-                setDescription(event.target.value)
+                setDescription(
+                  event.target.value
+                )
               }
               placeholder="Enter a short description"
               rows="3"
@@ -851,7 +1044,9 @@ function TrainingContent() {
             <select
               value={contentType}
               onChange={(event) =>
-                setContentType(event.target.value)
+                setContentType(
+                  event.target.value
+                )
               }
               style={inputStyle}
             >
@@ -864,41 +1059,6 @@ function TrainingContent() {
               </option>
             </select>
           </div>
-
-          {/* =================================================
-              TEXT CONTENT
-          ================================================== */}
-
-          {contentType === 'text' && (
-            <div
-              style={{
-                marginBottom: '25px',
-              }}
-            >
-              <label
-                style={{
-                  display: 'block',
-                  fontWeight: '600',
-                  marginBottom: '8px',
-                }}
-              >
-                Training Content
-              </label>
-
-              <textarea
-                value={body}
-                onChange={(event) =>
-                  setBody(event.target.value)
-                }
-                placeholder="Enter the training content"
-                rows="8"
-                style={{
-                  ...inputStyle,
-                  resize: 'vertical',
-                }}
-              />
-            </div>
-          )}
 
           {/* =================================================
               VIDEO URL
@@ -924,17 +1084,435 @@ function TrainingContent() {
                 type="url"
                 value={videoUrl}
                 onChange={(event) =>
-                  setVideoUrl(event.target.value)
+                  setVideoUrl(
+                    event.target.value
+                  )
                 }
                 placeholder="Enter video URL"
                 style={inputStyle}
               />
+
+              <p
+                style={{
+                  margin: '8px 0 0',
+                  color: '#777',
+                  fontSize: '13px',
+                }}
+              >
+                Enter the video link that
+                learners should watch.
+              </p>
+            </div>
+          )}
+
+          {/* =================================================
+              TRAINING CONTENT EDITOR
+              
+              BOTH TEXT AND VIDEO CAN HAVE THEORY.
+              
+              TEXT:
+              Required.
+              
+              VIDEO:
+              Optional supporting theory.
+          ================================================== */}
+
+          {(contentType === 'text' ||
+            contentType === 'video') && (
+            <div
+              style={{
+                marginBottom: '25px',
+              }}
+            >
+
+              <label
+                style={{
+                  display: 'block',
+                  fontWeight: '600',
+                  marginBottom: '8px',
+                }}
+              >
+                {contentType === 'video'
+                  ? 'Training Content (Optional)'
+                  : 'Training Content'}
+              </label>
+
+              {/* =================================================
+                  SCROLLABLE EDITOR
+              ================================================= */}
+
+              <div
+                style={{
+                  border: '1px solid #999',
+                  maxHeight: '500px',
+                  overflowY: 'auto',
+                  background: '#fff',
+                }}
+              >
+
+                {/* =================================================
+                    STICKY TOOLBAR
+                ================================================= */}
+
+                <div
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 10,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '6px',
+                    padding: '10px',
+                    borderBottom:
+                      '1px solid #999',
+                    background: '#f7f7f7',
+                  }}
+                >
+
+                  {/* PARAGRAPH */}
+
+                  <ToolbarButton
+                    title="Paragraph"
+                    active={
+                      editor?.isActive(
+                        'paragraph'
+                      )
+                    }
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .setParagraph()
+                        .run()
+                    }
+                  >
+                    P
+                  </ToolbarButton>
+
+                  {/* HEADING 1 */}
+
+                  <ToolbarButton
+                    title="Heading 1"
+                    active={
+                      editor?.isActive(
+                        'heading',
+                        {
+                          level: 1,
+                        }
+                      )
+                    }
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .toggleHeading({
+                          level: 1,
+                        })
+                        .run()
+                    }
+                  >
+                    H1
+                  </ToolbarButton>
+
+                  {/* HEADING 2 */}
+
+                  <ToolbarButton
+                    title="Heading 2"
+                    active={
+                      editor?.isActive(
+                        'heading',
+                        {
+                          level: 2,
+                        }
+                      )
+                    }
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .toggleHeading({
+                          level: 2,
+                        })
+                        .run()
+                    }
+                  >
+                    H2
+                  </ToolbarButton>
+
+                  {/* HEADING 3 */}
+
+                  <ToolbarButton
+                    title="Heading 3"
+                    active={
+                      editor?.isActive(
+                        'heading',
+                        {
+                          level: 3,
+                        }
+                      )
+                    }
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .toggleHeading({
+                          level: 3,
+                        })
+                        .run()
+                    }
+                  >
+                    H3
+                  </ToolbarButton>
+
+                  {/* BOLD */}
+
+                  <ToolbarButton
+                    title="Bold"
+                    active={editor?.isActive('bold')}
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .toggleBold()
+                        .run()
+                    }
+                  >
+                    B
+                  </ToolbarButton>
+
+                  {/* ITALIC */}
+
+                  <ToolbarButton
+                    title="Italic"
+                    active={editor?.isActive('italic')}
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .toggleItalic()
+                        .run()
+                    }
+                  >
+                    <em>I</em>
+                  </ToolbarButton>
+
+                  {/* BULLET LIST */}
+
+                  <ToolbarButton
+                    title="Bullet List"
+                    active={editor?.isActive(
+                      'bulletList'
+                    )}
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .toggleBulletList()
+                        .run()
+                    }
+                  >
+                    • List
+                  </ToolbarButton>
+
+                  {/* NUMBERED LIST */}
+
+                  <ToolbarButton
+                    title="Numbered List"
+                    active={editor?.isActive(
+                      'orderedList'
+                    )}
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .toggleOrderedList()
+                        .run()
+                    }
+                  >
+                    1. List
+                  </ToolbarButton>
+
+                  {/* BLOCKQUOTE */}
+
+                  <ToolbarButton
+                    title="Quote"
+                    active={editor?.isActive(
+                      'blockquote'
+                    )}
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .toggleBlockquote()
+                        .run()
+                    }
+                  >
+                    Quote
+                  </ToolbarButton>
+
+                  {/* CODE */}
+
+                  <ToolbarButton
+                    title="Code"
+                    active={editor?.isActive('code')}
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .toggleCode()
+                        .run()
+                    }
+                  >
+                    Code
+                  </ToolbarButton>
+
+                  {/* CODE BLOCK */}
+
+                  <ToolbarButton
+                    title="Code Block"
+                    active={editor?.isActive(
+                      'codeBlock'
+                    )}
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .toggleCodeBlock()
+                        .run()
+                    }
+                  >
+                    Code Block
+                  </ToolbarButton>
+
+                  {/* HORIZONTAL RULE */}
+
+                  <ToolbarButton
+                    title="Horizontal Rule"
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .setHorizontalRule()
+                        .run()
+                    }
+                  >
+                    ―
+                  </ToolbarButton>
+
+                  {/* LINK */}
+
+                  <ToolbarButton
+                    title="Add Link"
+                    active={editor?.isActive('link')}
+                    onClick={() => {
+                      const previousUrl =
+                        editor
+                          ?.getAttributes(
+                            'link'
+                          )
+                          .href || ''
+
+                      const url =
+                        window.prompt(
+                          'Enter URL',
+                          previousUrl
+                        )
+
+                      if (
+                        url === null
+                      ) {
+                        return
+                      }
+
+                      if (
+                        url === ''
+                      ) {
+                        editor
+                          ?.chain()
+                          .focus()
+                          .unsetLink()
+                          .run()
+
+                        return
+                      }
+
+                      editor
+                        ?.chain()
+                        .focus()
+                        .setLink({
+                          href: url,
+                        })
+                        .run()
+                    }}
+                  >
+                    Link
+                  </ToolbarButton>
+
+                  {/* UNDO */}
+
+                  <ToolbarButton
+                    title="Undo"
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .undo()
+                        .run()
+                    }
+                  >
+                    ↶
+                  </ToolbarButton>
+
+                  {/* REDO */}
+
+                  <ToolbarButton
+                    title="Redo"
+                    onClick={() =>
+                      editor
+                        ?.chain()
+                        .focus()
+                        .redo()
+                        .run()
+                    }
+                  >
+                    ↷
+                  </ToolbarButton>
+
+                </div>
+
+                {/* =================================================
+                    EDITOR AREA
+                ================================================== */}
+
+                <EditorContent
+                  editor={editor}
+                />
+
+              </div>
+
+              {/* =================================================
+                  EDITOR HELP
+              ================================================== */}
+
+              <p
+                style={{
+                  margin: '9px 0 0',
+                  color: '#777',
+                  fontSize: '13px',
+                  lineHeight: '1.5',
+                }}
+              >
+                {contentType === 'video'
+                  ? 'Add supporting theory or notes for the video if needed.'
+                  : 'Scroll inside the editor to work on longer content. The toolbar stays visible while scrolling.'}
+              </p>
+
             </div>
           )}
 
           {/* =================================================
               DISPLAY ORDER
-          ================================================== */}
+          ================================================= */}
 
           <div
             style={{
@@ -956,7 +1534,9 @@ function TrainingContent() {
               min="1"
               value={displayOrder}
               onChange={(event) =>
-                setDisplayOrder(event.target.value)
+                setDisplayOrder(
+                  event.target.value
+                )
               }
               style={inputStyle}
             />
@@ -964,7 +1544,7 @@ function TrainingContent() {
 
           {/* =================================================
               BUTTONS
-          ================================================== */}
+          ================================================= */}
 
           <div
             style={{
@@ -973,10 +1553,38 @@ function TrainingContent() {
               alignItems: 'center',
             }}
           >
+
             <button
               type="submit"
-              disabled={loading}
-              style={buttonStyle}
+              disabled={
+                loading ||
+                contentLoading ||
+                (
+                  hasExistingContent &&
+                  !isEditing
+                )
+              }
+              style={{
+                ...buttonStyle,
+                opacity:
+                  loading ||
+                  contentLoading ||
+                  (
+                    hasExistingContent &&
+                    !isEditing
+                  )
+                    ? 0.5
+                    : 1,
+                cursor:
+                  loading ||
+                  contentLoading ||
+                  (
+                    hasExistingContent &&
+                    !isEditing
+                  )
+                    ? 'not-allowed'
+                    : 'pointer',
+              }}
             >
               {loading
                 ? isEditing
@@ -990,14 +1598,20 @@ function TrainingContent() {
             {isEditing && (
               <button
                 type="button"
-                onClick={handleCancelEdit}
+                onClick={
+                  handleCancelEdit
+                }
                 disabled={loading}
-                style={secondaryButtonStyle}
+                style={
+                  secondaryButtonStyle
+                }
               >
                 Cancel Edit
               </button>
             )}
+
           </div>
+
         </form>
       </div>
 
@@ -1020,6 +1634,7 @@ function TrainingContent() {
               marginBottom: '24px',
             }}
           >
+
             <h2
               style={{
                 fontFamily: 'Georgia, serif',
@@ -1042,6 +1657,7 @@ function TrainingContent() {
                 ? 's'
                 : ''}
             </span>
+
           </div>
 
           {/* =================================================
@@ -1067,7 +1683,7 @@ function TrainingContent() {
 
             /* =================================================
                CONTENT LIST
-            ================================================== */
+            ================================================= */
 
             <div
               style={{
@@ -1075,6 +1691,7 @@ function TrainingContent() {
                 gap: '20px',
               }}
             >
+
               {contents.map((content) => (
 
                 <div
@@ -1100,7 +1717,7 @@ function TrainingContent() {
                   </div>
 
                   {/* -----------------------------------------
-                      TITLE
+                      CONTENT TITLE
                   ------------------------------------------ */}
 
                   <h3
@@ -1111,8 +1728,13 @@ function TrainingContent() {
                       margin: '0 0 18px',
                     }}
                   >
-                    {content.title ||
-                      'Untitled Content'}
+                    {getModuleName(
+                      modules.find(
+                        (module) =>
+                          String(module.id) ===
+                          String(selectedModule)
+                      ) || {}
+                    )}
                   </h3>
 
                   {/* -----------------------------------------
@@ -1185,7 +1807,8 @@ function TrainingContent() {
 
                   <div
                     style={{
-                      borderTop: '1px solid #ddd',
+                      borderTop:
+                        '1px solid #ddd',
                       paddingTop: '18px',
                     }}
                   >
@@ -1194,14 +1817,18 @@ function TrainingContent() {
                         TEXT CONTENT
                     ---------------------------------------- */}
 
-                    {content.content_type === 'text' && (
+                    {content.content_type ===
+                      'text' && (
                       <>
                         <div
                           style={{
                             fontSize: '12px',
-                            letterSpacing: '2px',
-                            fontWeight: '600',
-                            marginBottom: '8px',
+                            letterSpacing:
+                              '2px',
+                            fontWeight:
+                              '600',
+                            marginBottom:
+                              '8px',
                           }}
                         >
                           TRAINING CONTENT
@@ -1209,13 +1836,28 @@ function TrainingContent() {
 
                         <div
                           style={{
-                            whiteSpace: 'pre-wrap',
                             lineHeight: '1.6',
-                            marginBottom: '22px',
+                            marginBottom:
+                              '22px',
+                            padding: '20px',
+                            border:
+                              '1px solid #ddd',
+                            background:
+                              '#fafafa',
+                            maxHeight:
+                              '400px',
+                            overflowY:
+                              'auto',
                           }}
                         >
-                          {content.body ||
-                            'No training content available.'}
+                          <div
+                            className="admin-content-preview"
+                            dangerouslySetInnerHTML={{
+                              __html:
+                                content.body ||
+                                '<p>No training content available.</p>',
+                            }}
+                          />
                         </div>
                       </>
                     )}
@@ -1224,14 +1866,18 @@ function TrainingContent() {
                         VIDEO CONTENT
                     ---------------------------------------- */}
 
-                    {content.content_type === 'video' && (
+                    {content.content_type ===
+                      'video' && (
                       <>
                         <div
                           style={{
                             fontSize: '12px',
-                            letterSpacing: '2px',
-                            fontWeight: '600',
-                            marginBottom: '8px',
+                            letterSpacing:
+                              '2px',
+                            fontWeight:
+                              '600',
+                            marginBottom:
+                              '8px',
                           }}
                         >
                           VIDEO
@@ -1240,11 +1886,14 @@ function TrainingContent() {
                         {content.video_url ? (
                           <div
                             style={{
-                              marginBottom: '22px',
+                              marginBottom:
+                                '22px',
                             }}
                           >
                             <a
-                              href={content.video_url}
+                              href={
+                                content.video_url
+                              }
                               target="_blank"
                               rel="noreferrer"
                             >
@@ -1255,11 +1904,63 @@ function TrainingContent() {
                           <p
                             style={{
                               color: '#555',
-                              marginBottom: '22px',
+                              marginBottom:
+                                '22px',
                             }}
                           >
-                            No video URL available.
+                            No video URL
+                            available.
                           </p>
+                        )}
+
+                        {/* -----------------------------------
+                            SUPPORTING THEORY
+                        ------------------------------------ */}
+
+                        {content.body && (
+                          <>
+                            <div
+                              style={{
+                                fontSize:
+                                  '12px',
+                                letterSpacing:
+                                  '2px',
+                                fontWeight:
+                                  '600',
+                                marginBottom:
+                                  '8px',
+                              }}
+                            >
+                              TRAINING CONTENT
+                            </div>
+
+                            <div
+                              style={{
+                                lineHeight:
+                                  '1.6',
+                                marginBottom:
+                                  '22px',
+                                padding:
+                                  '20px',
+                                border:
+                                  '1px solid #ddd',
+                                background:
+                                  '#fafafa',
+                                maxHeight:
+                                  '400px',
+                                overflowY:
+                                  'auto',
+                              }}
+                            >
+                              <div
+                                className="admin-content-preview"
+                                dangerouslySetInnerHTML={{
+                                  __html:
+                                    content.body,
+                                }}
+                              />
+                            </div>
+                          </>
                         )}
                       </>
                     )}
@@ -1274,12 +1975,17 @@ function TrainingContent() {
                         gap: '10px',
                       }}
                     >
+
                       <button
                         type="button"
                         onClick={() =>
-                          handleEdit(content)
+                          handleEdit(
+                            content
+                          )
                         }
-                        style={editButtonStyle}
+                        style={
+                          editButtonStyle
+                        }
                       >
                         Edit
                       </button>
@@ -1287,18 +1993,27 @@ function TrainingContent() {
                       <button
                         type="button"
                         onClick={() =>
-                          handleDelete(content.id)
+                          handleDelete(
+                            content.id
+                          )
                         }
-                        style={deleteButtonStyle}
+                        style={
+                          deleteButtonStyle
+                        }
                       >
                         Delete
                       </button>
+
                     </div>
+
                   </div>
+
                 </div>
               ))}
+
             </div>
           )}
+
         </div>
       )}
 
@@ -1315,6 +2030,166 @@ function TrainingContent() {
           ← Back to Admin Dashboard
         </Link>
       </div>
+
+      {/* =====================================================
+          EDITOR STYLES
+      ====================================================== */}
+
+      <style>
+        {`
+          .ProseMirror {
+            min-height: 350px;
+            padding: 20px;
+            outline: none;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.7;
+          }
+
+          .ProseMirror p {
+            margin: 0 0 18px;
+          }
+
+          .ProseMirror h1 {
+            font-family: Georgia, serif;
+            font-size: 38px;
+            font-weight: 400;
+            line-height: 1.2;
+            margin: 30px 0 18px;
+          }
+
+          .ProseMirror h2 {
+            font-family: Georgia, serif;
+            font-size: 32px;
+            font-weight: 400;
+            line-height: 1.25;
+            margin: 28px 0 16px;
+          }
+
+          .ProseMirror h3 {
+            font-family: Georgia, serif;
+            font-size: 26px;
+            font-weight: 400;
+            line-height: 1.3;
+            margin: 25px 0 14px;
+          }
+
+          .ProseMirror ul,
+          .ProseMirror ol {
+            padding-left: 28px;
+            margin: 0 0 20px;
+          }
+
+          .ProseMirror li {
+            margin-bottom: 7px;
+          }
+
+          .ProseMirror blockquote {
+            border-left: 4px solid #222;
+            margin: 25px 0;
+            padding: 12px 20px;
+            background: #f5f5f5;
+          }
+
+          .ProseMirror code {
+            background: #f1f1f1;
+            border: 1px solid #ddd;
+            padding: 2px 6px;
+            font-family: Consolas, monospace;
+            font-size: 0.9em;
+          }
+
+          .ProseMirror pre {
+            background: #111;
+            color: #fff;
+            padding: 18px;
+            overflow-x: auto;
+            margin: 25px 0;
+          }
+
+          .ProseMirror pre code {
+            background: transparent;
+            border: none;
+            padding: 0;
+            color: inherit;
+          }
+
+          .ProseMirror hr {
+            border: none;
+            border-top: 1px solid #ccc;
+            margin: 35px 0;
+          }
+
+          .ProseMirror a {
+            text-decoration: underline;
+          }
+
+          .ProseMirror p.is-editor-empty:first-child::before {
+            color: #999;
+            content: attr(data-placeholder);
+            float: left;
+            height: 0;
+            pointer-events: none;
+          }
+
+          .admin-content-preview {
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.7;
+          }
+
+          .admin-content-preview p {
+            margin: 0 0 18px;
+          }
+
+          .admin-content-preview h1 {
+            font-family: Georgia, serif;
+            font-size: 34px;
+            font-weight: 400;
+            margin: 30px 0 18px;
+          }
+
+          .admin-content-preview h2 {
+            font-family: Georgia, serif;
+            font-size: 28px;
+            font-weight: 400;
+            margin: 26px 0 16px;
+          }
+
+          .admin-content-preview h3 {
+            font-family: Georgia, serif;
+            font-size: 23px;
+            font-weight: 400;
+            margin: 22px 0 14px;
+          }
+
+          .admin-content-preview ul,
+          .admin-content-preview ol {
+            padding-left: 28px;
+            margin-bottom: 20px;
+          }
+
+          .admin-content-preview blockquote {
+            border-left: 4px solid #222;
+            padding: 12px 20px;
+            margin: 25px 0;
+            background: #f5f5f5;
+          }
+
+          .admin-content-preview pre {
+            background: #111;
+            color: #fff;
+            padding: 18px;
+            overflow-x: auto;
+          }
+
+          .admin-content-preview code {
+            background: #f1f1f1;
+            padding: 2px 6px;
+          }
+        `}
+      </style>
+
     </div>
   )
 }

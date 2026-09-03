@@ -152,7 +152,11 @@ function ModulePage() {
           )
         }
 
-        setContent(contentData)
+        setContent(
+          Array.isArray(contentData)
+            ? contentData
+            : []
+        )
 
         // ===================================================
         // GET COURSE PROGRESS
@@ -207,10 +211,6 @@ function ModulePage() {
               {},
               handleSessionExpired
             )
-
-          // -------------------------------------------------
-          // NO CERTIFICATE
-          // -------------------------------------------------
 
           if (
             certificateResponse.status === 404
@@ -354,13 +354,23 @@ function ModulePage() {
           MODULE HEADER
       ===================================================== */}
 
-      <section className="page-intro">
+      <section
+        className="page-intro"
+        style={{
+          marginBottom: '0',
+          paddingBottom: '0',
+        }}
+      >
 
         <p className="eyebrow">
           MODULE {module.display_order}
         </p>
 
-        <h1>
+        <h1
+          style={{
+            marginBottom: '20px',
+          }}
+        >
           {module.title}
         </h1>
 
@@ -370,7 +380,14 @@ function ModulePage() {
           MODULE CONTENT
       ===================================================== */}
 
-      <section className="module-content">
+      <section
+        className="module-content"
+        style={{
+          maxWidth: '900px',
+          marginTop: '0',
+          paddingTop: '0',
+        }}
+      >
 
         {content.length === 0 ? (
           <p>
@@ -382,36 +399,101 @@ function ModulePage() {
             <article
               key={item.id}
               className="training-content"
+              style={{
+                marginBottom: '70px',
+              }}
             >
 
-              {item.subtitle && (
-                <h2>
-                  {item.subtitle}
-                </h2>
+              {/* =================================================
+                  CONTENT DESCRIPTION
+              ================================================= */}
+
+              {item.description && (
+                <p
+                  style={{
+                    margin: '0 0 30px',
+                    padding: 0,
+                    fontSize: '18px',
+                    lineHeight: '1.7',
+                    color: '#666',
+                  }}
+                >
+                  {item.description}
+                </p>
               )}
 
-              {item.content_type ===
-                'video' &&
+              {/* =================================================
+                  VIDEO CONTENT
+              ================================================= */}
+
+              {item.content_type === 'video' &&
                 item.video_url && (
-                  <div className="video-container">
+                  <div
+                    className="video-container"
+                    style={{
+                      marginBottom: '40px',
+                    }}
+                  >
 
                     <iframe
                       src={item.video_url}
-                      title={
-                        item.subtitle ||
-                        'Training video'
-                      }
+                      title="Training video"
                       allowFullScreen
                     />
 
                   </div>
                 )}
 
+              {/* =================================================
+                  TEXT / THEORY CONTENT
+                  
+                  IMPORTANT:
+                  This renders body for BOTH text and video
+                  content types.
+              ================================================= */}
+
               {item.body && (
-                <div className="training-body">
-                  {item.body}
-                </div>
+                <div
+                  className="training-body"
+                  style={{
+                    maxWidth: '850px',
+                    fontSize: '18px',
+                    lineHeight: '1.8',
+                    color: '#111',
+                  }}
+                  dangerouslySetInnerHTML={{
+                    __html: item.body,
+                  }}
+                />
               )}
+
+              {/* =================================================
+                  EMPTY CONTENT
+              ================================================= */}
+
+              {!item.body &&
+                item.content_type === 'text' && (
+                  <p
+                    style={{
+                      color: '#666',
+                    }}
+                  >
+                    No training content available.
+                  </p>
+                )}
+
+              {!item.body &&
+                item.content_type === 'video' &&
+                !item.video_url && (
+                  <p
+                    style={{
+                      color: '#666',
+                    }}
+                  >
+                    No training video or theory
+                    content is available.
+                  </p>
+                )}
 
             </article>
           ))
@@ -433,10 +515,6 @@ function ModulePage() {
           <h2>
             You have completed this module
           </h2>
-
-          {/* -------------------------------------------------
-              HAS NEXT MODULE
-          ------------------------------------------------- */}
 
           {nextModule && (
             <>
@@ -465,10 +543,6 @@ function ModulePage() {
               </button>
             </>
           )}
-
-          {/* -------------------------------------------------
-              LAST MODULE
-          ------------------------------------------------- */}
 
           {!nextModule && (
             <>

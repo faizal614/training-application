@@ -22,6 +22,32 @@ function CourseDetails() {
   const [modules, setModules] = useState([])
 
   // -------------------------
+  // COURSE DISPLAY NUMBER
+  // -------------------------
+  //
+  // This is the visible course number.
+  //
+  // It matches the numbering used
+  // on the Courses page.
+  //
+  // Database ID is NOT used here.
+  //
+  // Example:
+  //
+  // Database IDs:
+  // 17, 22, 31
+  //
+  // Display:
+  // COURSE 1
+  // COURSE 2
+  // COURSE 3
+  //
+  // -------------------------
+
+  const [courseDisplayNumber, setCourseDisplayNumber] =
+    useState(null)
+
+  // -------------------------
   // ENROLLMENT
   // -------------------------
 
@@ -98,6 +124,50 @@ function CourseDetails() {
         setModules(modulesData)
 
         // ---------------------------------------------------
+        // GET COURSE DISPLAY NUMBER
+        // ---------------------------------------------------
+        //
+        // Use the exact same course ordering as
+        // pages/Courses.jsx.
+        //
+        // Courses.jsx numbers courses based on
+        // their position in /courses/enrolled/me.
+        //
+        // We do the same here.
+        // ---------------------------------------------------
+
+        const coursesResponse = await apiFetch(
+          '/courses/enrolled/me',
+          {},
+          handleSessionExpired
+        )
+
+        const coursesData =
+          await coursesResponse.json()
+
+        if (!coursesResponse.ok) {
+          throw new Error(
+            coursesData.detail ||
+              'Failed to load courses'
+          )
+        }
+
+        if (Array.isArray(coursesData)) {
+          const currentCourseIndex =
+            coursesData.findIndex(
+              (item) =>
+                Number(item.course_id) ===
+                Number(courseId)
+            )
+
+          if (currentCourseIndex !== -1) {
+            setCourseDisplayNumber(
+              currentCourseIndex + 1
+            )
+          }
+        }
+
+        // ---------------------------------------------------
         // NOT LOGGED IN
         // ---------------------------------------------------
 
@@ -118,7 +188,8 @@ function CourseDetails() {
           handleSessionExpired
         )
 
-        const enrolledData = await enrolledResponse.json()
+        const enrolledData =
+          await enrolledResponse.json()
 
         if (!enrolledResponse.ok) {
           throw new Error(
@@ -127,10 +198,11 @@ function CourseDetails() {
           )
         }
 
-        const isEnrolled = enrolledData.some(
-          (item) =>
-            item.course_id === Number(courseId)
-        )
+        const isEnrolled =
+          enrolledData.some(
+            (item) =>
+              item.course_id === Number(courseId)
+          )
 
         setEnrolled(isEnrolled)
 
@@ -392,7 +464,10 @@ function CourseDetails() {
       <section className="page-intro">
 
         <p className="eyebrow">
-          COURSE {course.id}
+          COURSE{' '}
+          {courseDisplayNumber !== null
+            ? courseDisplayNumber
+            : ''}
         </p>
 
         <h1>

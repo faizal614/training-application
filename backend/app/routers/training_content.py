@@ -39,10 +39,8 @@ def check_module_access(
     assignment = (
         db.query(CourseAssignment)
         .filter(
-            CourseAssignment.course_id
-            == module.course_id,
-            CourseAssignment.user_id
-            == current_user.id,
+            CourseAssignment.course_id == module.course_id,
+            CourseAssignment.user_id == current_user.id,
         )
         .first()
     )
@@ -70,11 +68,13 @@ def create_training_content(
         require_instructor_or_admin
     ),
 ):
+    # ---------------------------------------------------------
+    # FIND MODULE
+    # ---------------------------------------------------------
+
     module = (
         db.query(Module)
-        .filter(
-            Module.id == module_id
-        )
+        .filter(Module.id == module_id)
         .first()
     )
 
@@ -84,11 +84,40 @@ def create_training_content(
             detail="Module not found",
         )
 
+    # ---------------------------------------------------------
+    # CHECK ACCESS
+    # ---------------------------------------------------------
+
     check_module_access(
         module,
         current_user,
         db,
     )
+
+    # ---------------------------------------------------------
+    # ONLY ONE CONTENT ITEM PER MODULE
+    # ---------------------------------------------------------
+
+    existing_content = (
+        db.query(TrainingContent)
+        .filter(
+            TrainingContent.module_id == module_id
+        )
+        .first()
+    )
+
+    if existing_content is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This module already has training content. "
+                "Please edit the existing content instead."
+            ),
+        )
+
+    # ---------------------------------------------------------
+    # VALIDATE CONTENT TYPE
+    # ---------------------------------------------------------
 
     if content_data.content_type not in {
         "text",
@@ -96,47 +125,71 @@ def create_training_content(
     }:
         raise HTTPException(
             status_code=400,
-            detail="Content type must be either 'text' or 'video'",
+            detail=(
+                "Content type must be either "
+                "'text' or 'video'"
+            ),
         )
 
-    if (
-        not content_data.title
-        or not content_data.title.strip()
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Content title is required",
-        )
+    # ---------------------------------------------------------
+    # TEXT CONTENT
+    # ---------------------------------------------------------
 
-    if (
-        content_data.content_type == "text"
-        and not content_data.body
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Text content requires a body",
-        )
+    if content_data.content_type == "text":
+        if (
+            not content_data.body
+            or not content_data.body.strip()
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Text content requires "
+                    "training content"
+                ),
+            )
 
-    if (
-        content_data.content_type == "video"
-        and not content_data.video_url
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Video content requires a video URL",
-        )
+    # ---------------------------------------------------------
+    # VIDEO CONTENT
+    # ---------------------------------------------------------
+
+    if content_data.content_type == "video":
+        if (
+            not content_data.video_url
+            or not content_data.video_url.strip()
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Video content requires "
+                    "a video URL"
+                ),
+            )
+
+    # ---------------------------------------------------------
+    # CREATE CONTENT
+    #
+    # TITLE = MODULE TITLE
+    # ---------------------------------------------------------
 
     content = TrainingContent(
         module_id=module_id,
-        title=content_data.title.strip(),
+        title=module.title,
         description=(
             content_data.description.strip()
             if content_data.description
             else None
         ),
         content_type=content_data.content_type,
-        video_url=content_data.video_url,
-        body=content_data.body,
+        video_url=(
+            content_data.video_url.strip()
+            if content_data.video_url
+            else None
+        ),
+        body=(
+            content_data.body.strip()
+            if content_data.body
+            else None
+        ),
         display_order=content_data.display_order,
     )
 
@@ -161,9 +214,7 @@ def get_module_content(
 ):
     module = (
         db.query(Module)
-        .filter(
-            Module.id == module_id
-        )
+        .filter(Module.id == module_id)
         .first()
     )
 
@@ -231,6 +282,10 @@ def update_training_content(
         require_instructor_or_admin
     ),
 ):
+    # ---------------------------------------------------------
+    # FIND CONTENT
+    # ---------------------------------------------------------
+
     content = (
         db.query(TrainingContent)
         .filter(
@@ -244,6 +299,10 @@ def update_training_content(
             status_code=404,
             detail="Training content not found",
         )
+
+    # ---------------------------------------------------------
+    # FIND MODULE
+    # ---------------------------------------------------------
 
     module = (
         db.query(Module)
@@ -259,11 +318,19 @@ def update_training_content(
             detail="Module not found",
         )
 
+    # ---------------------------------------------------------
+    # CHECK ACCESS
+    # ---------------------------------------------------------
+
     check_module_access(
         module,
         current_user,
         db,
     )
+
+    # ---------------------------------------------------------
+    # VALIDATE CONTENT TYPE
+    # ---------------------------------------------------------
 
     if content_data.content_type not in {
         "text",
@@ -271,37 +338,53 @@ def update_training_content(
     }:
         raise HTTPException(
             status_code=400,
-            detail="Content type must be either 'text' or 'video'",
+            detail=(
+                "Content type must be either "
+                "'text' or 'video'"
+            ),
         )
 
-    if (
-        not content_data.title
-        or not content_data.title.strip()
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Content title is required",
-        )
+    # ---------------------------------------------------------
+    # TEXT CONTENT
+    # ---------------------------------------------------------
 
-    if (
-        content_data.content_type == "text"
-        and not content_data.body
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Text content requires a body",
-        )
+    if content_data.content_type == "text":
+        if (
+            not content_data.body
+            or not content_data.body.strip()
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Text content requires "
+                    "training content"
+                ),
+            )
 
-    if (
-        content_data.content_type == "video"
-        and not content_data.video_url
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Video content requires a video URL",
-        )
+    # ---------------------------------------------------------
+    # VIDEO CONTENT
+    # ---------------------------------------------------------
 
-    content.title = content_data.title.strip()
+    if content_data.content_type == "video":
+        if (
+            not content_data.video_url
+            or not content_data.video_url.strip()
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Video content requires "
+                    "a video URL"
+                ),
+            )
+
+    # ---------------------------------------------------------
+    # UPDATE CONTENT
+    #
+    # TITLE ALWAYS MATCHES MODULE TITLE
+    # ---------------------------------------------------------
+
+    content.title = module.title
 
     content.description = (
         content_data.description.strip()
@@ -313,9 +396,21 @@ def update_training_content(
         content_data.content_type
     )
 
-    content.video_url = content_data.video_url
-    content.body = content_data.body
-    content.display_order = content_data.display_order
+    content.video_url = (
+        content_data.video_url.strip()
+        if content_data.video_url
+        else None
+    )
+
+    content.body = (
+        content_data.body.strip()
+        if content_data.body
+        else None
+    )
+
+    content.display_order = (
+        content_data.display_order
+    )
 
     db.commit()
     db.refresh(content)
@@ -377,7 +472,9 @@ def delete_training_content(
     db.commit()
 
     return {
-        "message": "Training content deleted successfully",
+        "message": (
+            "Training content deleted successfully"
+        ),
         "content_id": content_id,
         "module_id": module_id,
     }
