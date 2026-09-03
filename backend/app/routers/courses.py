@@ -91,30 +91,30 @@ def get_courses(
 
 
 # =========================================================
-# GET MY ENROLLED COURSES
+# GET AVAILABLE COURSES FOR CURRENT USER
 # =========================================================
-#
-# Returns courses assigned to the currently authenticated
-# learner.
-#
-# Includes:
-#
-# - Assignment information
-# - Deadline
-# - Module completion
-# - Course completion status
-# - Progress percentage
 #
 # IMPORTANT:
 #
-# A course is considered completed when:
+# This endpoint returns ALL courses on the platform.
 #
-#     total_modules > 0
-#     AND
-#     completed_modules == total_modules
+# A learner does NOT need to be assigned a course before
+# the course appears in the course catalogue.
 #
-# If completed == True, the frontend can display
-# "COMPLETED" instead of the deadline.
+# If the learner has an existing assignment/enrollment:
+#
+#     assignment_id -> assignment ID
+#     assigned_at   -> assignment date
+#     deadline      -> course deadline
+#
+# If the learner has NOT enrolled/been assigned:
+#
+#     assignment_id -> None
+#     assigned_at   -> None
+#     deadline      -> None
+#
+# This allows the frontend to display all available courses
+# and allow the learner to enroll in them.
 #
 # =========================================================
 
@@ -124,36 +124,63 @@ def get_my_enrolled_courses(
     db: Session = Depends(get_db),
 ):
     # -----------------------------------------------------
+    # GET ALL COURSES
+    # -----------------------------------------------------
+    #
+    # Do NOT filter courses by user_id here.
+    #
+    # This is what allows Google SSO users and local users
+    # to see the complete course catalogue.
+    #
+    # -----------------------------------------------------
+
+    courses = (
+        db.query(Course)
+        .order_by(Course.id)
+        .all()
+    )
+
+    # -----------------------------------------------------
     # GET CURRENT USER'S ASSIGNMENTS
+    # -----------------------------------------------------
+    #
+    # We fetch assignments separately so that courses
+    # without an assignment are still returned.
+    #
     # -----------------------------------------------------
 
     assignments = (
         db.query(CourseAssignment)
         .filter(
-            CourseAssignment.user_id == current_user.id,
-        )
-        .order_by(
-            CourseAssignment.id
+            CourseAssignment.user_id == current_user.id
         )
         .all()
     )
 
+    # -----------------------------------------------------
+    # CREATE ASSIGNMENT LOOKUP
+    # -----------------------------------------------------
+
+    assignments_by_course = {
+        assignment.course_id: assignment
+        for assignment in assignments
+    }
+
     result = []
 
-    # -----------------------------------------------------
-    # PROCESS EACH ASSIGNMENT
-    # -----------------------------------------------------
+    # =====================================================
+    # PROCESS EVERY COURSE
+    # =====================================================
 
-    for assignment in assignments:
-
-        course = assignment.course
+    for course in courses:
 
         # -------------------------------------------------
-        # SAFETY CHECK
+        # CHECK WHETHER CURRENT USER IS ENROLLED
         # -------------------------------------------------
 
-        if course is None:
-            continue
+        assignment = assignments_by_course.get(
+            course.id
+        )
 
         # =================================================
         # GET COURSE MODULES
@@ -180,7 +207,7 @@ def get_my_enrolled_courses(
         ]
 
         # =================================================
-        # GET MODULE PROGRESS
+        # GET CURRENT USER'S MODULE PROGRESS
         # =================================================
 
         if module_ids:
@@ -188,8 +215,12 @@ def get_my_enrolled_courses(
             progress_records = (
                 db.query(ModuleProgress)
                 .filter(
-                    ModuleProgress.user_id == current_user.id,
-                    ModuleProgress.module_id.in_(module_ids),
+                    ModuleProgress.user_id
+                    == current_user.id,
+
+                    ModuleProgress.module_id.in_(
+                        module_ids
+                    ),
                 )
                 .all()
             )
@@ -219,26 +250,27 @@ def get_my_enrolled_courses(
                 module.id
             )
 
-            if progress is not None:
+            if progress is None:
+                continue
 
-                # -------------------------------------------------
-                # Handle enum status safely.
-                # -------------------------------------------------
+            # -------------------------------------------------
+            # Handle enum status safely.
+            # -------------------------------------------------
 
-                if hasattr(
-                    progress.status,
-                    "value"
-                ):
-                    module_status = (
-                        progress.status.value
-                    )
-                else:
-                    module_status = str(
-                        progress.status
-                    )
+            if hasattr(
+                progress.status,
+                "value",
+            ):
+                module_status = (
+                    progress.status.value
+                )
+            else:
+                module_status = str(
+                    progress.status
+                )
 
-                if module_status == "completed":
-                    completed_modules += 1
+            if module_status == "completed":
+                completed_modules += 1
 
         # =================================================
         # TOTAL MODULES
@@ -265,11 +297,7 @@ def get_my_enrolled_courses(
         # COURSE COMPLETION
         # =================================================
         #
-        # Do NOT consider a course with zero modules
-        # completed.
-        #
-        # This prevents an empty course from being
-        # incorrectly marked as completed.
+        # A course with zero modules is NOT completed.
         #
         # =================================================
 
@@ -285,10 +313,18 @@ def get_my_enrolled_courses(
         result.append(
             {
                 # -----------------------------------------
-                # ASSIGNMENT
+                # ASSIGNMENT / ENROLLMENT
                 # -----------------------------------------
 
-                "assignment_id": assignment.id,
+                "assignment_id": (
+                    assignment.id
+                    if assignment is not None
+                    else None
+                ),
+
+                "is_enrolled": (
+                    assignment is not None
+                ),
 
                 # -----------------------------------------
                 # COURSE
@@ -306,13 +342,21 @@ def get_my_enrolled_courses(
                 # ASSIGNMENT DATE
                 # -----------------------------------------
 
-                "assigned_at": assignment.assigned_at,
+                "assigned_at": (
+                    assignment.assigned_at
+                    if assignment is not None
+                    else None
+                ),
 
                 # -----------------------------------------
                 # DEADLINE
                 # -----------------------------------------
 
-                "deadline": assignment.deadline,
+                "deadline": (
+                    assignment.deadline
+                    if assignment is not None
+                    else None
+                ),
 
                 # -----------------------------------------
                 # COMPLETION
@@ -328,7 +372,9 @@ def get_my_enrolled_courses(
 
                 "total_modules": total_modules,
 
-                "progress_percentage": progress_percentage,
+                "progress_percentage": (
+                    progress_percentage
+                ),
             }
         )
 
@@ -468,8 +514,11 @@ def enroll_in_course(
     existing_assignment = (
         db.query(CourseAssignment)
         .filter(
-            CourseAssignment.user_id == current_user.id,
-            CourseAssignment.course_id == course_id,
+            CourseAssignment.user_id
+            == current_user.id,
+
+            CourseAssignment.course_id
+            == course_id,
         )
         .first()
     )
@@ -481,7 +530,7 @@ def enroll_in_course(
         )
 
     # -----------------------------------------------------
-    # CREATE ASSIGNMENT
+    # CREATE ASSIGNMENT / ENROLLMENT
     # -----------------------------------------------------
 
     assignment = CourseAssignment(
@@ -495,8 +544,11 @@ def enroll_in_course(
 
     return {
         "message": "Successfully enrolled in course",
+
         "course_id": course_id,
+
         "user_id": current_user.id,
+
         "assignment_id": assignment.id,
     }
 
@@ -565,7 +617,10 @@ def get_course_progress(
             db.query(ModuleProgress)
             .filter(
                 ModuleProgress.user_id == user_id,
-                ModuleProgress.module_id.in_(module_ids),
+
+                ModuleProgress.module_id.in_(
+                    module_ids
+                ),
             )
             .all()
         )
@@ -620,7 +675,9 @@ def get_course_progress(
         module_progress.append(
             {
                 "module_id": module.id,
+
                 "title": module.title,
+
                 "status": module_status,
             }
         )
@@ -888,6 +945,7 @@ def delete_course(
 
     return {
         "message": "Course deleted successfully",
+
         "course_id": course_id,
     }
 

@@ -39,10 +39,60 @@ class User(Base):
         nullable=False,
     )
 
-    password_hash: Mapped[str] = mapped_column(
+    # =========================================================
+    # PASSWORD AUTHENTICATION
+    # =========================================================
+    #
+    # Local users have a password hash.
+    #
+    # Google SSO users may not have a password, therefore
+    # this column must allow NULL.
+    #
+    # =========================================================
+
+    password_hash: Mapped[str | None] = mapped_column(
         String(255),
-        nullable=False,
+        nullable=True,
     )
+
+    # =========================================================
+    # AUTHENTICATION PROVIDER
+    # =========================================================
+    #
+    # local  -> email/password
+    # google -> Google Workspace SSO
+    #
+    # Existing users automatically remain "local".
+    #
+    # =========================================================
+
+    auth_provider: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="local",
+        server_default="local",
+    )
+
+    # =========================================================
+    # GOOGLE SUBJECT ID
+    # =========================================================
+    #
+    # This stores Google's stable subject identifier for the
+    # authenticated Google account.
+    #
+    # It is nullable because local users do not have one.
+    #
+    # =========================================================
+
+    google_sub: Mapped[str | None] = mapped_column(
+        String(255),
+        unique=True,
+        nullable=True,
+    )
+
+    # =========================================================
+    # ROLE
+    # =========================================================
 
     role: Mapped[UserRole] = mapped_column(
         SQLEnum(UserRole),
@@ -50,15 +100,19 @@ class User(Base):
         default=UserRole.LEARNER,
     )
 
+    # =========================================================
+    # ACCOUNT STATUS
+    # =========================================================
+
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=True,
     )
 
-    # ---------------------------------------------------------
+    # =========================================================
     # COURSE ASSIGNMENTS
-    # ---------------------------------------------------------
+    # =========================================================
 
     course_assignments: Mapped[
         list["CourseAssignment"]
@@ -67,9 +121,9 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
-    # ---------------------------------------------------------
+    # =========================================================
     # MODULE PROGRESS
-    # ---------------------------------------------------------
+    # =========================================================
 
     module_progress: Mapped[
         list["ModuleProgress"]
@@ -78,9 +132,9 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
-    # ---------------------------------------------------------
+    # =========================================================
     # QUIZ ATTEMPTS
-    # ---------------------------------------------------------
+    # =========================================================
 
     quiz_attempts: Mapped[
         list["QuizAttempt"]

@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-
+import os
 from fastapi import FastAPI
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +44,7 @@ from backend.app.routers.instructor import (
 from backend.app.services.deadline_reminder import (
     process_deadline_reminders,
 )
+from starlette.middleware.sessions import SessionMiddleware
 
 
 # =========================================================
@@ -141,6 +142,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="DataCaliper Training API",
     lifespan=lifespan,
+)
+
+# =========================================================
+# SESSION MIDDLEWARE
+# =========================================================
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv(
+        "SESSION_SECRET_KEY",
+        "change-this-session-secret",
+    ),
 )
 
 
