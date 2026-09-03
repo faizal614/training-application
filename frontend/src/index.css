@@ -40,3 +40,64 @@ button {
 a {
   color: inherit;
 }
+
+.github-link {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+
+  width: 58px;
+  height: 58px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #ffffff;
+  color: #000000;
+
+  border: 1px solid #d9d9d9;
+  border-radius: 50%;
+
+  text-decoration: none;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+
+  z-index: 1000;
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.github-link svg {
+  width: 32px;
+  height: 32px;
+  fill: currentColor;
+}
+
+.github-link:hover {
+  transform: translateY(-3px);
+
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.24);
+}
+
+.github-link:focus-visible {
+  outline: 2px solid #000000;
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .github-link {
+    right: 16px;
+    bottom: 16px;
+
+    width: 52px;
+    height: 52px;
+  }
+
+  .github-link svg {
+    width: 29px;
+    height: 29px;
+  }
+}

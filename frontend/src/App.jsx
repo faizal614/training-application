@@ -36,6 +36,7 @@ import Certificates from './pages/admin/Certificates'
 import InstructorDashboard from './pages/instructor/InstructorDashboard'
 import ManageCourse from './pages/instructor/ManageCourse'
 import GoogleCallback from './pages/GoogleCallback'
+import GithubLink from './components/GithubLink'
 
 import './App.css'
 
@@ -302,14 +303,14 @@ function App() {
           path="/instructor/course/:courseId"
           element={<ManageCourse />}
         />
-        
+
         <Route
           path="/google-callback"
           element={<GoogleCallback />}
         />
 
       </Routes>
-
+      <GithubLink />
     </div>
   )
 }
